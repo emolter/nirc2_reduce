@@ -1,0 +1,197 @@
+## reading in flats from before
+flatkp=readfits('~imke/keck/2017jul21/reduct/fits/flatkp.fits')
+flath=readfits('~imke/keck/2017jul21/reduct/fits/flath.fits')
+hpmask=readfits('~imke/keck/2017jul21/reduct/fits/hpmask.fits')
+
+## cutting out pieces of flats for different sized subarrays
+# subc 256
+flath2=fltarr(256,264)
+flath2(0:255,0:263)=flath(512-128:512+127,512-132:512+131)
+# subc 128
+flath3=fltarr(128,152)
+flath3(0:127,0:151)=flath(512-64:512+63,512-76:512+75)
+hpmask3() #taking the same bit of the bad pixel mask
+
+## load in the standard star images. normally should be bxy3
+# recall that this divides by coadds
+;.run ~/idl/imke_pro/loadims2.pro
+; narrow camera
+;loadims,42,44,hdh,fdir='data/',fname='n000',ext='.fits.gz',scam='scam'     ;  tint=0.020
+# if there's only one image can use readfits instead, but does not divide by coadds
+hdh=readfits('data/n0098.fits.gz',h)        
+
+## same steps as for science data - median average with the sky, apply bad pixel mask, divide by tint to get photons/s
+tint=0.020  ;H, Kp
+avgmed_new,sky,Hdh,/noweight
+atv,sky
+im=Hdh
+for i=0,2 do im(*,*,i)=Hdh(*,*,i)-sky(*,*)
+for i=0,2 do Hdh(*,*,i)=im(*,*,i)/flath2(*,*)
+badpix,Hdh,out,hpmasksm2
+Hdh=out/tint
+atv,out
+out=Hdh
+
+## save the image 
+save,filename='reduct/savefiles/hd1160.sav',hdch4s,hdkp,hdh
+
+## calculate flux from magnitudes
+# lots of extra info below
+# need: magnitude of star in the filter + filter throughput as function of wavelength + Vega magnitude in that filter -> flux density in erg s-1 cm-2 um-1
+# can do with website, which makes things easy: morpheus.phys.lsu.edu/magnitude.html
+# Vega spectrum also in IDL save file stsci_spectra.idlsav
+
+restore,'reduct/savefiles/hd1160.sav'
+
+print,vega1(1,1890)  ;hcont   1.29E-6
+print,vega1(1,1911)  ;H       1.156E-6
+print,vega1(1,1916)  ;Feii    1.070E-6
+print,vega1(1,1757)  ;J       2.933E-6
+print,vega1(1,1774)  ;Pabeta  2.574E-6
+print,vega1(1,1743)  ;Jcont   3.252E-6
+print,vega1(1,2109)  ;nb2.108 4.37013e-07  
+print,vega1(1,2166)  ;kcont   3.43553e-07
+print,vega1(1,1895)  ;CH4_short (1.5923)  1.216E-6
+Kp band: 686 Jy = 0 mag =  4.43347e-07 ergs/s/cm^2/um
+
+
+From: http://irtfweb.ifa.hawaii.edu/IRrefdata/iwafdv.html
+Vega flux densities, converted to erg/s/cm^2/um
+J (1.25):  1560 Jy   2.92123e-06
+H (1.633):  1053 Jy  1.15641e-06 
+Kp (2.12): 686 Jy    4.417e-07     
+Lp: 249 Jy           5.411e-08
+Ms: 163 Jy           2.231e-08
+
+
+## now need to convert counts/s in the image to erg s-1 cm-2 um-1
+# the photometry routine asks you to identify center of star and outer edge of PSF, then it adds up all the flux from there to give you total counts
+# note it also subtracts sky/background when doing this calculation - should check that there is zero gradient across the outer region of the image b/c this proves that you have all the flux
+# divide total counts by tint*coadd to get counts/s
+# then take previous step, where we found flux density of standard star, divide flux density / (cts s-1) = erg cm-2 um-1 ct-1 (flux per count)
+# now take flux per count and multiply by science image to get that into physical flux units
+# put the answer you get onto the Google Doc spreadsheet
+
+restore,'../2014aug05/reduct/savefiles/hd1160.sav'
+loadct,0
+.run photometry
+photometry,hdkp,out  
+
+All stars were divided by tint; so numbers are in counts/sec
+
+Kp: 9.50E6, 9.20E6, 9.90E6 --> 9.50E6 
+H:  1.40E7,  1.60E7,  1.70E7 --> 1.60E7
+CH4S: 5.70E6, 6.10E6, 6.05E6 --> 6.0E6
+
+# here looking at total in different boxes on detector
+or via quadrants 120x120 pixels
+print,total(hdkp(10:130,130:250,0))
+print,total(hdkp(130:250,130:250,0))
+print,total(hdkp(130:250,10:130,0))
+print,total(hdkp(10:130,130:250,1))
+print,total(hdkp(130:250,130:250,1))
+print,total(hdkp(130:250,10:130,1))
+print,total(hdkp(10:130,130:250,2))
+print,total(hdkp(130:250,130:250,2))
+print,total(hdkp(130:250,10:130,2))
+print,total(hdkp(10:130,10:130,0))  ;Use only this for sky background, because persistant charge
+; but really one should add the persistent charge to the flux, since star is placed in a hole. 
+; except for first one 
+
+
+Kp: 1.23E7,1.24E7,1.20E7 --> 1.23E7
+H:   2.16E7,2.17E7, 2.09E7 -->2.16E7
+CH4: 8.45E6, 8.24E6, 7.97E6 -->8.25E6
+
+
+ HD1160
+          J 	H 	K 	L 	J-K 	H-K 	K-L    M
+HD1160: 7.055 	7.045 	7.040 	7.025 	0.015 	0.005 	0.015 7.04
+
+
+
+NARROW CAMERA
+
+H band: 0 mag = 1053 Jy =  1.15641e-06 ergs/s/cm^2/um
+
+use: 7.045 mag ==> for 
+    f=10^(-7.045/2.5) * 1.15641e-06 =  1.758E-9 ergs/s/cm^2/um
+
+  Hence 1 ct/sec = 1.758E-9/2.16E7 = 
+		  = 8.14E-17  erg/s/cm-2/um-1 
+
+One can also use: http://morpheus.phys.lsu.edu/magnitude.html
+
+
+====
+====
+1 ct/sec = ergs/s/cm-2/um-1:
+
+H: 8.14E-17 
+Kp: 5.50E-17
+CH4: 2.23E-16
+
+
+## airmass correction
+===
+Median is better to use:
+Extinction, median:  http://www2.keck.hawaii.edu/realpublic/inst/nirc/exts.html
+  J: 0.102 mag/airmass
+  H: 0.059
+  K: 0.088
+  Lp: 0.093
+  M: 0.220
+
+# air_t = airmass science target - 1.0
+# air_c = airmass calibrator - 1.0
+# tau = number above: mag/airmass of extinction
+# factor = exp(tau*air_t)/exp(tau*air_c)  -> exponential like a regular extinction law
+# then multiply science image by factor
+# these airmass corrections are usually <= a few percent; can safely ignore usually
+===
+
+## I/F calculations: get ratio with solar flux, since this is reflected sunlight after all
+# need solar flux in each filter we use -> convolve Sun spectrum with bandpass
+# want spectral flux density so be sure to divide by bandpass width in um
+# make sure units are correct! May have Sun spectrum in W m-2 but want cgs
+# use Sun-Neptune distance at time of observation to convert to flux at Neptune distance
+# sun spectrum in stsci_spectra.idlsav
+# see note below about converting sun flux to sun brightness with a factor of pi
+# see also Imke's revised script
+
+solar flux: from README.sunvega
+
+;Kp: 2.124:  1.948--2.299
+; 1.948-2.299:  print,total(sun(1,1170:1345))/176.0 = 
+skp=94773.6    ;ergs/cm^2/s/um
+;H: 1.485-1.781:  print,total(sun(1,939:1086))/148.0 = 
+sh=232223.     ;ergs/cm^2/s/um
+;CH4_short: 1.5295-1.6552:  print,total(sun(1,961:1024))/64.0 =
+sch4=248435.
+
+;Uranus:
+
+r=20.01833 #Uranus-Sun distance
+delta=19.543777 #Uranus-Keck distance
+
+H:
+omega= 2.3232E-15 ;steradians (Narrow camera) #number of steradians per pixel
+# convert measured \pi F_\odot to F_\odot for I/F calculation
+# need factor of pi because F = pi*B
+# see de Pater 2014 Rarog paper
+# the flux density you get from the Sun has the factor of pi in it; to get brightness, divide spectrum by pi
+solarflux= sh/3.14156/r/r ;ergs/s/cm^2/um  
+itime=1.  ;should be the integration time of Uranus
+ctssec=8.14E-17  ;(from HD1160 above, converting cts/sec to erg/s/cm-2/um-1 )
+
+conversion=1./ omega * 1./solarflux  * ctssec/itime 
+;multiply by conversion to get I/F
+print,conversion   ;1.90E-4
+
+conversion=1./ omega * 1./solarflux ;* ctssec/itime 
+;multiply by conversion to get I/F
+print,conversion   ;2.33E12
+
+
+## do in each of the bxy3 positions to see how stable it is
+## do in every filter, obviously

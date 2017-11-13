@@ -1,0 +1,9 @@
+# filter_1    filter_2    flux_2/flux_1
+2mass_ks    kp    1.08501986702
+2mass_h    h    1.04870603534
+2mass_h    ch4_short    1.11918693424
+2mass_h    ch4_s    1.11918693424
+2mass_h    ch4s    1.11918693424
+2mass_j    j    0.966187779207
+2mass_j    he1a    1.56547407812
+2mass_j    pabeta    0.8452970922526
