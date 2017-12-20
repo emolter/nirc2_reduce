@@ -14,7 +14,10 @@ class Nod:
         '''Input two file names, a science image and a sky.'''
         self.image = Image(imagef)
         self.data = self.image.data
-        self.sky = Image(skyf).data
+        if type(skyf) != str:
+            self.sky = np.zeros(self.data.shape)
+        else:
+            self.sky = Image(skyf).data
         self.subc = self.image.hdulist[0].header['NAXIS1']
         if self.subc == 256:
             self.data = self.data[4:-4,:]

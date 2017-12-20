@@ -49,6 +49,19 @@ class Stack:
         self.ratios = ratios
         print('Image stack object created with filters {}'.format(self.filts))
         
+    def plot(self, filt1, filt2):
+        ratioim = self.ratios[filt1+'/'+filt2]
+        fig, ax = plt.subplots(1,1, figsize = (9,9))
+        ax.imshow(ratioim, origin = 'lower left')
+        plt.show()
+        
+    def write(self, fname, filt1, filt2):
+        ratioim = self.ratios[filt1+'/'+filt2]
+        hdulist_out = self.stack[filt1].im.hdulist
+        hdulist_out[0].header['OBJECT'] = 'ratio_'+filt1+'/'+filt2
+        hdulist_out[0].data = ratioim
+        hdulist_out[0].writeto(fname, overwrite=True)
+        
     def extract_point(self, x, y):
         '''Print the I/F value and central wavelength of each filter
         for a given x,y coordinate in the image'''

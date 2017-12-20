@@ -11,11 +11,14 @@ import warnings
 from skimage import feature
 from image_registration.chi2_shifts import chi2_shift
 from image_registration.fft_tools.shift import shiftnd, shift2d
-from pyproj import Proj
 from scipy.interpolate import interp2d, RectBivariateSpline
 #from .fit_gaussian import fitgaussian
 from astropy.modeling import models, fitting
 from scipy.ndimage.measurements import center_of_mass
+from scipy.ndimage.interpolation import zoom
+
+from mpl_toolkits.basemap import Basemap
+import pyproj
 
 
 def lat_lon(x,y,ob_lon,ob_lat,pixscale_km,np_ang,req,rpol):
@@ -257,6 +260,127 @@ class CoordGrid:
             plt.show()
     
     
+    def edge_detect_error(self, niter, perturb_l, perturb_dist, low_thresh = 0.002, dist = 0.02, sigma = 5, doplot = True):
+        '''Perturbs parameters of Canny algorithm to produce a variety of 
+        edge detection solutions. Finds most probable one, and takes 
+        standard deviation of those to produce an error
+        perturb_l, perturb_dist        Factor by which low_thresh and distance between low and high threshold are changed. must be >= 1
+        sigmavals                      List of sigma values to use. Usually some subset of [3,5,7]
+        niter                          Number of iterations for each low, high threshold value'''
+        
+        #set up the model planet
+        self.model_planet = np.nan_to_num(self.lat_g * 0.0 + 1.0)
+        model_edges = feature.canny(self.model_planet, sigma=sigma, low_threshold = low_thresh, high_threshold = low_thresh + dist)
+
+        if doplot:
+            inp = False
+            while not inp:
+            
+                #set up arrays of values
+                l_vals = np.arange(low_thresh/perturb_l, low_thresh*perturb_l, (low_thresh*perturb_l - low_thresh/perturb_l)/niter)
+                dist_vals = np.arange(dist/perturb_dist, dist*perturb_dist, (dist*perturb_dist - dist/perturb_dist)/niter)
+                
+                #check that lowest, middle, and highest params give you what is expected
+                l_bounds = [l_vals[0], low_thresh, l_vals[-1]]
+                d_bounds = [dist_vals[0], dist, dist_vals[-1]]
+                fig, axes = plt.subplots(3, 3, figsize=(8, 12), sharex = True, sharey = True)
+                
+                for i in range(3):
+                    #do the edges 
+                    l = l_bounds[i]
+                    d = d_bounds[i]
+                    edges = feature.canny(self.data/np.max(self.data), sigma=sigma, low_threshold = l, high_threshold = l + d)
+                    [dx,dy,dxerr,dyerr] = chi2_shift(model_edges,edges)
+                    shift_edges = shift2d(edges,-1*dx,-1*dy)
+                    
+                    #plot things
+                    axarr = axes[i]
+                    axarr[0].imshow(self.data, origin = 'lower left')
+                    axarr[1].imshow(edges, origin = 'lower left')
+                    axarr[2].imshow(shift_edges, origin = 'lower left', alpha = 0.5)
+                    axarr[2].imshow(model_edges, origin = 'lower left', alpha = 0.5) 
+                    
+                    #cosmetics
+                    if i == 0:
+                        axarr[0].set_title('Image')
+                        axarr[1].set_title('Edges, $\sigma=$%d'%sigma)
+                        axarr[2].set_title('Overlay model and data')
+                    
+                    for ax in axarr:
+                        ax.set_xticklabels([])
+                        ax.set_yticklabels([])
+                        ax.set_ylim([0, edges.shape[1]])
+                        ax.set_xlim([0, edges.shape[0]])
+                        
+                    axarr[0].set_ylabel('l = '+str(l)[:6]+', d = '+str(d)[:6])
+                
+                plt.subplots_adjust(wspace = 0, hspace = 0)
+                plt.show()          
+            
+                yn = input('Are you okay with these? (y/n): ')
+                if yn.lower() == 'y' or yn.lower() == 'yes':
+                    inp = True
+                else:
+                    low_thresh = float(input('New value of low_thresh: '))
+                    dist = float(input('New value of dist: '))
+                    perturb_l = float(input('New value of perturb_l: '))
+                    perturb_dist = float(input('New value of perturb_dist: '))
+        else:
+            l_vals = np.arange(low_thresh/perturb_l, low_thresh*perturb_l, (low_thresh*perturb_l - low_thresh/perturb_l)/niter)
+            dist_vals = np.arange(dist/perturb_dist, dist*perturb_dist, (dist*perturb_dist - dist/perturb_dist)/niter)
+        
+        #now iterate over the parameter space and determine x,y for each
+        dx_vals, dy_vals = [], []
+        dxerr_vals , dyerr_vals = [], []
+        for lt in l_vals:
+            for d in dist_vals:
+                ht = lt + d
+                edges = feature.canny(self.data/np.max(self.data), sigma=sigma, low_threshold = lt, high_threshold = ht)
+                [dx,dy,dxerr,dyerr] = chi2_shift(model_edges,edges)
+                dx_vals.append(dx)
+                dy_vals.append(dy)
+                dxerr_vals.append(dxerr)
+                dyerr_vals.append(dyerr)
+                #print(d, dx, dy)
+                plotevery = False
+                if plotevery:
+                    fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(10, 5))
+                    
+                    ax0.imshow(self.data, origin = 'lower left')
+                    ax0.set_title('Image')
+                    
+                    ax1.imshow(edges, origin = 'lower left')
+                    ax1.set_title('Canny filter, $\sigma=$%d'%sigma)
+                    
+                    ax2.imshow(shift2d(edges,-1*dx,-1*dy), origin = 'lower left', alpha = 0.5)
+                    ax2.imshow(model_edges, origin = 'lower left', alpha = 0.5)
+                    ax2.set_title('Overlay model and data') 
+                    
+                    plt.show()                   
+        dx_vals = np.asarray(dx_vals)
+        dy_vals = np.asarray(dy_vals)
+        dxerr_vals = np.asarray(dxerr_vals)
+        dyerr_vals = np.asarray(dyerr_vals)
+        print('Best X, Y = ', np.mean(dx_vals), np.mean(dy_vals))
+        print('Sigma X, Y = ', np.std(dx_vals), np.std(dy_vals))
+        print('Typical shift error X, Y = ', np.mean(dxerr_vals), np.mean(dyerr_vals))
+        print('Spread in shift error X, Y = ', np.std(dxerr_vals), np.std(dyerr_vals))
+        print('Total error X, Y = ', np.sqrt(np.std(dx_vals)**2 + np.mean(dxerr_vals)**2), np.sqrt(np.std(dy_vals)**2 + np.mean(dyerr_vals)**2))
+        
+        if doplot:
+            #histogram of the samples
+            fig, (ax0, ax1) = plt.subplots(2,1, figsize = (6,8))
+            
+            ax0.hist(dx_vals, bins = niter)
+            ax1.hist(dy_vals, bins = niter)
+            
+            ax0.set_xlabel('Shift in X')
+            ax0.set_ylabel('Number')
+            ax1.set_xlabel('Shift in Y')
+            ax1.set_ylabel('Number')
+            plt.show()
+        
+    
     def manual_shift(self,dx,dy):
         self.centered = shift2d(self.data,dx,dy)
         
@@ -496,8 +620,22 @@ class CoordGrid:
         cs_g = ax0.contour(eval_g/np.max(eval_g), [0.68], colors = 'red')
         plt.show()                                 
         
-            
-'''        
+           
+    def deproject(self):
+        
+        fig, ax = plt.subplots(1,1)
+        m = Basemap(rsphere = (self.req, self.rpol), projection='cyl', lon_0=180, ax = ax)
+        m.drawparallels(np.arange(-90.,99.,30.))
+        m.drawmeridians(np.arange(-180.,180.,60.))
+        m.pcolor(self.lon_e, self.lat_g, self.centered, latlon = True)
+        
+        plt.savefig('deproj.png')
+        plt.show()
+        
+        
+        
+        
+    '''                  
     def deproject(self):
         ''''''
         projector = Proj(proj='eqc', lon_0 = 0, lat_ts = 0, a = 24764000.0, b = 24341000.0) #Equidistant Cylindrical (Plate Caree)
@@ -515,5 +653,4 @@ class CoordGrid:
         #
         #plt.imshow(projected, origin = 'lower left')
         #plt.show()
-
     '''

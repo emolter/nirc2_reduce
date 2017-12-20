@@ -9,7 +9,7 @@ date = '2017sep27'
 outdir = 'reduced/'+date+'/'
 filt_name = 'h'
 target_name = 'Neptune'
-filenames_all = sort_rawfiles.find_object('Neptune',date)
+filenames_all = sort_rawfiles.find_object(target_name,date)
 
 ## flats ##
 domeflatoff, domeflaton = sort_rawfiles.get_flats(filt_name, date)
@@ -43,6 +43,18 @@ obs.per_second()
 plt.imshow(obs.frames[0], origin = 'lower left')
 plt.show()
 
+## nod ##
+from nirc2_reduce import nod
+obs = nod.Nod(skyf, imagef)
+obs.apply_sky()
+obs.apply_flat(outdir+'flat_master_'+filt_name+'.fits')
+obs.apply_badpx_map(outdir+'badpx_map_'+filt_name+'.fits')
+obs.dewarp()
+obs.remove_cosmic_rays()
+obs.per_second()
+obs.crop(200)
+obs.write(outdir+'stacked_nophot_'+filt_name+'.fits', png = True, png_file = outdir+target_name+'_'+filt_name+'.png')
+
 ## now if there is no photometry, do the following ##
 obs.write_frames([outdir+'frame0_nophot_'+filt_name+'.fits',outdir+'frame1_nophot_'+filt_name+'.fits',outdir+'frame2_nophot_'+filt_name+'.fits'])
 obs.stack()
@@ -50,7 +62,9 @@ obs.crop(50)
 #check it
 plt.imshow(obs.final, origin = 'lower left')
 plt.show()
-obs.write_final(outdir+'stacked_nophot_'+filt_name+'.fits',png=True, png_file = outdir+target_name+'_'+filt_name+'.png')
+obs.write_final(outdir+'stacked_nophot_'+filt_name+'.fits')#,png=True, png_file = outdir+target_name+'_'+filt_name+'.png')
+
+
 
 
 ## if there is photometry ## 
@@ -117,6 +131,7 @@ coords.locate_feature(outfile = 'locate.txt')
 coords.bootstrap_func(order = 2)
 
 # if you already did the edge detection and ran write_latlon, then want to reopen:
+from nirc2_reduce import coordgrid
 coords = coordgrid.CoordGrid('h_centered.fits', lead_string = 'h')
 coords.plot_latlon()
 
@@ -129,8 +144,8 @@ from nirc2_reduce import imstack
 import matplotlib.pyplot as plt
 stack = imstack.Stack(['h_centered.fits', 'kp_centered.fits', 'ch4s_centered.fits', 'pabeta_centered.fits'])
 stack.extract_point(200,200)
-plt.imshow(stack.ratios['kp/h'], origin = 'lower left')
-plt.show()
+stack.plot('kp','h')
+stack.write('kp_over_h.fits', 'kp', 'h')
 
 
 
