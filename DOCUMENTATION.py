@@ -9,7 +9,6 @@ date = '2017sep27'
 outdir = 'reduced/'+date+'/'
 filt_name = 'h'
 target_name = 'Neptune'
-filenames_all = sort_rawfiles.find_object(target_name,date)
 
 ## flats ##
 domeflatoff, domeflaton = sort_rawfiles.get_flats(filt_name, date)
@@ -27,21 +26,32 @@ flat.plot()
 ## if no flats were taken, get from a nearby date and just modify apply_badpx_map and apply_flat
 
 ## bxy3 ##
+flat_filt = 'kp'
+filenames_all = sort_rawfiles.find_object(target_name,date)
 fnames = sort_rawfiles.find_filter(filenames_all, filt_name)
 print(fnames)
 #ensure these files are a bxy3 before continuing
 obs = bxy3.Bxy3(fnames)
 obs.make_sky(outdir+'sky_'+filt_name+'.fits')
 obs.apply_sky(outdir+'sky_'+filt_name+'.fits')
-obs.apply_flat(outdir+'flat_master_'+filt_name+'.fits')
-obs.apply_badpx_map(outdir+'badpx_map_'+filt_name+'.fits')
+obs.apply_flat(outdir+'flat_master_'+flat_filt+'.fits')
+obs.apply_badpx_map(outdir+'badpx_map_'+flat_filt+'.fits')
 obs.dewarp()
 obs.trim()
 obs.remove_cosmic_rays() # at this step there remain a few spots where pixel value is much lower than Neptune pixels. Doubt this is the fault of cosmic ray program; possibly failing to find them in flats with bad pixel search. Perhaps multi-layer search, e.g. large blocksize first, small blocksize second
 obs.per_second()
-#to check anything, plot obs.frames
-plt.imshow(obs.frames[0], origin = 'lower left')
-plt.show()
+#to check any step use:
+obs.plot_frames()
+
+
+## multiple bxy3 at once ##
+from nirc2_reduce import multi_reduce
+filt_list = ['lp','ms','pah','kcont','h2o_ice','br_alpha','bra_cont','hcont']
+flatfilt_list = ['kp' for val in range(len(filt_list))]
+date = '2017may27'
+target_name = 'Io'
+multi_reduce.multiBxy3(date, target_name, filt_list, flatfilt_list)
+multi_reduce.multiBxy3Plot(date, filt_list)
 
 ## nod ##
 from nirc2_reduce import nod
@@ -82,7 +92,7 @@ standard_files = sort_rawfiles.find_object(standard_name,date)
 stand_fnames = sort_rawfiles.find_filter(standard_files, keck_filt)
 #check that these are the ones you want
 stand = phot.bxy3Phot(stand_fnames)  OR stand = phot.nodPhot(sky_name, image_name)
-stand.reduce(outdir+'sky_'+keck_filt+'.fits', outdir+'flat_master_'+keck_filt+'.fits', outdir+'badpx_map_'+keck_filt+'.fits', [outdir+'phot0_'+keck_filt+'.fits', outdir+'phot1_'+keck_filt+'.fits', outdir+'phot2_'+keck_filt+'.fits'])
+stand.reduce(outdir+'photsky_'+keck_filt+'.fits', outdir+'flat_master_'+keck_filt+'.fits', outdir+'badpx_map_'+keck_filt+'.fits', [outdir+'phot0_'+keck_filt+'.fits', outdir+'phot1_'+keck_filt+'.fits', outdir+'phot2_'+keck_filt+'.fits'])
 OR 
 stand.reduce(outdir+'flat_master_'+keck_filt+'.fits', outdir+'badpx_map_'+keck_filt+'.fits', outdir+'phot_'+keck_filt+'.fits')
 
@@ -104,15 +114,31 @@ obs.write_final(outdir+'stacked_'+filt_name+'.fits',png=False, png_file = '')
 
 
 
+## multiple photometry at once ##
+from nirc2_reduce import multi_reduce
+filt_list = ['lp','ms','pah','kcont','h2o_ice','br_alpha','bra_cont']
+mag_list = [7.31, 7.32, 7.31, 7.294, 7.294, 7.31, 7.31] #remember, these are mags in the standard filter whose wavelength matches most closely with the Keck filter
+#in this case [bessell_lp, bessell_m, bessell_lp, 2mass_ks, 2mass_ks, bessell_lp, bessell_lp]
+flatfilt_list = ['kp' for val in range(len(filt_list))]
+date = '2017may27'
+target_name = 'HD106965'
+multi_reduce.multiPhot(date, target_name, filt_list, mag_list, flatfilt_list, doplots = True)
+
+#apply multiple photometry to data at once
+from nirc2_reduce import multi_reduce
+airmass = 1.029
+date = '2017jul31'
+multi_reduce.multiApplyPhot(date, airmass)
+
 
 
 
 ## tertiary data products ##
 # start Python 3 in directory containing stacked image
 from nirc2_reduce import coordgrid
-coords = coordgrid.CoordGrid('stacked_nophot_h.fits')
-#apply final phot at this step
-coords.ioverf(filt, flux_per, stand_airmass)
+coords = coordgrid.CoordGrid('h_calibrated.fits')
+## apply final phot at this step if not yet applied
+#coords.ioverf(filt, flux_per, stand_airmass)
 coords.edge_detect(low_thresh = 0.01, high_thresh = 0.05, sigma = 5)
 #for kp, coords.edge_detect(low_thresh = 0.0001, high_thresh = 0.001, sigma = 5)
 #or
@@ -129,6 +155,9 @@ coords.locate_feature(outfile = 'locate.txt')
 
 # to get the coefficients of a photometry bootstrapping fit (IoverF_min vs mu)
 coords.bootstrap_func(order = 2)
+
+# to project onto flat
+coords.project(outstem = 'h', resample = True) #, pixsz = 0.009942)
 
 # if you already did the edge detection and ran write_latlon, then want to reopen:
 from nirc2_reduce import coordgrid
@@ -149,11 +178,16 @@ stack.write('kp_over_h.fits', 'kp', 'h')
 
 
 
-
-
-
-
 test
-from nirc2_reduce import coordgrid
-coords = coordgrid.CoordGrid('h_centered.fits', lead_string = 'h')
-coords.locate_feature(outfile = 'locate.txt')
+from nirc2_reduce import multi_reduce
+filt_list = ['h', 'kp', 'ch4_short', 'pabeta', 'he1_a']
+flatfilt_list = ['h', 'kp', 'h', 'j', 'j']
+mag_list = [7.013, 7.04, 7.013, 6.983, 6.983]
+target_name = 'HD1160'
+airmass = 1.044
+date = '2017jul25'
+dist_list = [100, 100, 100, 100, 100]
+multi_reduce.multiPhot(date, target_name, filt_list, mag_list, flatfilt_list, doplots = True, dist_list = dist_list)
+#multi_reduce.multiApplyPhot(date, airmass)
+
+

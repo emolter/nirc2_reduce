@@ -1,9 +1,17 @@
 # filter_1    filter_2    flux_2/flux_1
 2mass_ks    kp    1.08501986702
+2mass_ks	kcont		0.80608830092
+2mass_ks   h2o_ice		0.25104285307
 2mass_h    h    1.04870603534
 2mass_h    ch4_short    1.11918693424
 2mass_h    ch4_s    1.11918693424
-2mass_h    ch4s    1.11918693424
+2mass_h    ch4s		1.11918693424
+2mass_h    hcont		1.12187351592
 2mass_j    j    0.966187779207
 2mass_j    he1a    1.56547407812
 2mass_j    pabeta    0.8452970922526
+bessell_lp	lp		1.07012544469
+bessell_lp	pah		1.73635864999
+bessell_lp	br_alpha		0.767577226169
+bessell_lp	bra_cont		0.818886439229
+bessell_m	ms		1.04586958788

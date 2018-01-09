@@ -104,7 +104,7 @@ class Spectrum:
 def make_vega_table():
     '''This function to make table of effective wavelengths and fluxes
     for each Keck filter'''
-    filtlist = ['brgamma','feii','h','hcont','j','k','kcont','kp','ks','lp','ms']
+    filtlist = ['brgamma','feii','h','hcont','j','k','kcont','kp','ks','lp','ms','pah','br_alpha','bra_cont','h2o_ice','ch4_short','pabeta','he1_a']
     with open('filter_passbands/vega_fluxes.txt', 'w') as f:
         f.write('filter, lambda_eff (um), Vega flux density (erg s-1 cm-2 um-1)'+'\n')
         for filtname in filtlist:
@@ -115,7 +115,7 @@ def make_vega_table():
             f.write(fnstr[:10] + ', ' + wl_eff + ', ' + vega_mag + '\n')
 
 def make_sun_table():
-    filtlist = ['brgamma','feii','h','hcont','j','k','kcont','kp','ks','lp','ms']
+    filtlist = ['brgamma','feii','h','hcont','j','k','kcont','kp','ks','lp','ms','pah','br_alpha','bra_cont','h2o_ice','ch4_short','pabeta','he1_a']
     with open('filter_passbands/sun_fluxes.txt', 'w') as f:
         f.write('filter, lambda_eff (um), Solar flux density (erg s-1 cm-2 um-1)'+'\n')
         for filtname in filtlist:
@@ -142,9 +142,10 @@ def convert_filters(f1, f2):
     
     filt1 = Filt(f1, isfsps = True)
     v1 = filt1.find_vega_flux()
+    print(v1)
     filt2 = Filt(f2)
     v2 = filt2.find_vega_flux()
-    
+    print(v2)
     return v2/v1
     
 '''We need a way to convert between filters.
@@ -161,4 +162,5 @@ conversion factor.
 #make_sun_table()        
 #make_vega_table()   
 #print(find_sun_narrow(1.2903))
-#print(convert_filters('2mass_j', 'j'))
+#print(convert_filters('2mass_ks', 'h2o_ice'))
+#print(convert_filters('bessell_m', 'ms'))

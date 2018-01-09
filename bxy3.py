@@ -58,7 +58,7 @@ class Bxy3:
             ll = int(ctr - self.subc/2)
             ul = int(ctr + self.subc/2)
             full_sky = full_sky[ll:ul,ll:ul]
-        
+
         sz = int(self.subc/16) #just hardcoded this with a reasonable value
         c0 = (int(self.subc/2 + self.subc/4), int(self.subc/2 - self.subc/4))
         c1 = (int(self.subc/2 - self.subc/4), int(self.subc/2 + self.subc/4))
@@ -73,16 +73,19 @@ class Bxy3:
         
         frames_skysub = []
         fullmed = np.median(full_sky)
-        for i in range(3):
-            skybits = [skybits0,skybits1,skybits2][i]
-            frame = self.frames[i]
-            med0 = np.median(skybits[0])
-            med1 = np.median(skybits[1])
-            med = np.mean([med0, med1])
-            norm = med/fullmed
-            sky_norm = full_sky*norm
-            frames_skysub.append(frame - sky_norm)
-        self.frames = np.asarray(frames_skysub)
+        if np.abs(fullmed) > 5.0: #minimum average counts hardcoded here
+            for i in range(3):
+                skybits = [skybits0,skybits1,skybits2][i]
+                frame = self.frames[i]
+                med0 = np.median(skybits[0])
+                med1 = np.median(skybits[1])
+                med = np.mean([med0, med1])
+                norm = med/fullmed
+                sky_norm = full_sky*norm
+                frames_skysub.append(frame - sky_norm)
+            self.frames = np.asarray(frames_skysub)
+        else:
+            print('Sky subtraction not applied (counts too low for good stats)')
                     
     def apply_flat(self,fname):
         flat = Image(fname).data
@@ -227,7 +230,17 @@ class Bxy3:
             outfile = outfiles[i]
             hdulist_out = self.dummy_fits.hdulist
             hdulist_out[0].data = frame
-            hdulist_out[0].writeto(outfile, overwrite=True)  
+            hdulist_out[0].writeto(outfile, overwrite=True) 
+            
+    def plot_frames(self):
+        fig, axes = plt.subplots(1,3, figsize = (9,5))
+        for i in range(len(axes)):
+            ax = axes[i]
+            ax.imshow(self.frames[i], origin = 'lower left')
+            ax.set_title('Frame %d'%i)
+            ax.set_xticks([])
+            ax.set_yticks([])
+        plt.show()
         
     def write_final(self,outfile,png = False,png_file=''):
         hdulist_out = self.dummy_fits.hdulist

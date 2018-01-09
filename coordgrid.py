@@ -2,6 +2,7 @@
 
 import numpy as np
 import matplotlib.pyplot as plt
+import matplotlib.gridspec as gridspec
 from astropy.io import fits
 from .get_ephem import get_ephemerides, naif_lookup
 from nirc2_reduce.image import Image
@@ -11,13 +12,13 @@ import warnings
 from skimage import feature
 from image_registration.chi2_shifts import chi2_shift
 from image_registration.fft_tools.shift import shiftnd, shift2d
-from scipy.interpolate import interp2d, RectBivariateSpline
+from scipy.interpolate import interp2d, RectBivariateSpline, NearestNDInterpolator
 #from .fit_gaussian import fitgaussian
 from astropy.modeling import models, fitting
 from scipy.ndimage.measurements import center_of_mass
 from scipy.ndimage.interpolation import zoom
 
-from mpl_toolkits.basemap import Basemap
+from mpl_toolkits import basemap
 import pyproj
 
 
@@ -87,6 +88,9 @@ def emission_angle(ob_lat, surf_n):
     ob = np.asarray([np.cos(np.radians(ob_lat)),0,np.sin(np.radians(ob_lat))])
     return np.dot(surf_n.T,ob)
     
+#def sun_angle(ob_lon, ob_lat, sun_lon, sun_lat):
+#    return
+    
 def get_filt_info(filt):
     '''Helper to I/F. Will find flux of sun in given filter'''
     with open('/Users/emolter/Python/nirc2_reduce/filter_passbands/sun_fluxes.txt','r') as f:
@@ -98,6 +102,11 @@ def get_filt_info(filt):
                 wl = float(l[1].strip(', \n'))
                 sun_mag = float(l[2].strip(', \n'))
                 return wl, sun_mag
+                
+def find_airmass(observatory, time, object):
+    '''Use the power of astropy to retrieve airmass of standard
+    star automatically... obvs not done yet'''
+    return
                 
 def airmass_correction(air_t, air_c, filt):
     '''Helper to I/F. Computes correction factor to photometry based on airmass.
@@ -156,6 +165,7 @@ class CoordGrid:
         tend = tstart + timedelta(minutes=1)
         tstart = datetime.strftime(tstart, '%Y-%m-%d %H:%M')
         tend = datetime.strftime(tend, '%Y-%m-%d %H:%M')
+        self.date_time = tstart
         
         #pull ephemeris data
         naif = naif_lookup(targ)
@@ -178,6 +188,7 @@ class CoordGrid:
         self.ang_diam = float(ephem[15])
         self.ob_lon, self.ob_lat = float(ephem[16]), float(ephem[17])
         self.sun_lon, self.sun_lat = float(ephem[18]), float(ephem[19])
+        #self.sun_ang = sun_angle(ob_lon, ob_lat, sun_lon, sun_lat)
         self.np_ang, self.np_dist = float(ephem[20]), float(ephem[21])
         self.sun_dist = float(ephem[22])*1.496e8 #from AU to km
         self.dist = float(ephem[24])*1.496e8 #from AU to km        
@@ -221,6 +232,21 @@ class CoordGrid:
         self.data = self.data * flux_per * air_corr / sun_flux_density
         if hasattr(self, 'centered'):
             self.centered = self.centered * flux_per * air_corr / sun_flux_density
+    
+    #def minnaert(self, k):
+    #    '''Applies Minnaert correction to remove effects of limb darkening
+    #    k is an empirically determined constant between 0 and 1, 0.7 for Io'''
+    #    self.data = self.data * self.sun_ang**k * self.mu**(k - 1)
+    #    if hasattr(self, 'centered'):
+    #        self.centered = self.centered * mu0**k * self.mu**(k - 1)
+            
+    def write_photonly(self, outstr):
+        '''If you want to just run ioverf and then write'''
+        hdulist_out = self.im.hdulist
+        #centered data
+        hdulist_out[0].header['OBJECT'] = self.target+'_calibrated'
+        hdulist_out[0].data = self.data
+        hdulist_out[0].writeto(outstr, overwrite=True)
 
     def edge_detect(self, low_thresh = 0.01, high_thresh = 0.05, sigma = 5, plot = True):
         '''Uses skimage canny algorithm to find edges of planet, correlates
@@ -621,36 +647,103 @@ class CoordGrid:
         plt.show()                                 
         
            
-    def deproject(self):
+    def project(self, outstem = 'h', resample = True, pixsz = None, interp = 'nearest'):
+        '''Project the data onto a flat x-y grid.
+        Can handle arbitrary map projections
+        projection = "cyl" is a cylindrical equidistant (equirectangular)
+        pixsz is in arcsec'''
         
-        fig, ax = plt.subplots(1,1)
-        m = Basemap(rsphere = (self.req, self.rpol), projection='cyl', lon_0=180, ax = ax)
-        m.drawparallels(np.arange(-90.,99.,30.))
-        m.drawmeridians(np.arange(-180.,180.,60.))
-        m.pcolor(self.lon_e, self.lat_g, self.centered, latlon = True)
+        mutf = np.copy(self.mu)
+        mutf[mutf >= 0] = 1.0
+        mutf[mutf != 1.0] = 0.0
         
-        plt.savefig('deproj.png')
+        fs = 14 #fontsize for plots
+        fig = plt.figure(figsize = (10,10))
+        ax0 = plt.subplot2grid((5,5),(0,0), colspan = 5, rowspan = 3)
+        ax1 = plt.subplot2grid((5,5), (3,0), colspan = 2, rowspan = 2)
+        ax2 = plt.subplot2grid((5,5), (3, 3), colspan = 2, rowspan = 2)
+        
+        #initialize basemap and overlay image
+        m0 = basemap.Basemap(rsphere = (self.req, self.rpol), projection='cyl', lon_0=180, ax = ax0)
+        m0.pcolor(self.lon_e, self.lat_g, self.centered, latlon = True, cmap = 'gray')
+        
+        #add pretty stuff
+        m0.drawparallels(np.arange(-90.,99.,30.), labels=[1,0,0,0], fontsize=fs, color = 'cyan')
+        m0.drawmeridians(np.arange(-180.,180.,60.), labels=[0,0,0,1], fontsize=fs, color = 'cyan')
+        
+        m1 = basemap.Basemap(rsphere = (self.req, self.rpol), projection='npstere', boundinglat=30, lon_0=180, ax = ax1)
+        m1.drawparallels(np.arange(-90.,99.,30.), labels=[1,1,1,1], fontsize=fs, color = 'cyan')
+        m1.drawmeridians(np.arange(-180.,180.,60.), labels=[1,1,1,1], fontsize=fs, color = 'cyan') 
+        m1.pcolor(self.lon_e, self.lat_g, self.centered, latlon = True, cmap = 'gray') 
+        m1.pcolor(self.lon_e, self.lat_g, mutf, latlon = True, cmap = 'gray')       
+        
+        m2 = basemap.Basemap(rsphere = (self.req, self.rpol), projection='spstere', boundinglat=-30, lon_0=180, ax = ax2)
+        m2.drawparallels(np.arange(-90.,99.,30.), labels=[1,1,1,1], fontsize=fs, color = 'cyan')
+        m2.drawmeridians(np.arange(-180.,180.,60.), labels=[1,1,1,1], fontsize=fs, color = 'cyan')
+        m2.pcolor(self.lon_e, self.lat_g, self.centered, latlon = True, cmap = 'gray')
+        
+        ax0.set_title(self.date_time, fontsize = fs + 2)
+        plt.subplots_adjust(hspace = 1.0, wspace = -0.4)
+        plt.savefig(outstem+'_proj.png', bbox = None)
         plt.show()
         
+        ## Do a map of the distortions from projection:
+        ##     emission angle effects
+        ##     tissot indicatrices
+                
+        #x,y = m(self.lon_e, self.lat_g) #might be useful later
+        if resample:
+            '''TO DO HERE:
+            Carry NaNs on regions where there is no lat-lon coverage over
+                    to the reprojected image
+            Write functions that take advantage of the fact it is deprojected?
+                    Else save this for another package of functions'''
+            
+            #determine the number of pixels in resampled image
+            if pixsz == None:
+                pixsz = self.pixscale_arcsec
+            npix_per_degree = (1/self.deg_per_px) * (pixsz / self.pixscale_arcsec) # (old pixel / degree lat) * (arcsec / old pixel) / (arcsec / new pixel) = new pixel / degree lat
+            npix = int(npix_per_degree * 180) #(new pixel / degree lat) * (degree lat / planet) = new pixel / planet
+            print('New image will be %d by %d pixels'%(2*npix, npix))
+
+            lon2, lat2, x2, y2 = m.makegrid(npix*2, npix, returnxy = True)
+            
+            if interp == 'linear':
+                print('Linear interp chosen. warning: this will take a very long time')
+                interpolator = interp2d(self.lon_e, self.lat_g, self.centered, kind = 'linear')
+                vals2 = interpolator(lon2, lat2)
+            
+            elif interp == 'nearest':
+                print('Performing nearest neighbor interpolation. Takes about a minute for a 1000 x 500 grid')
+                lon1 = np.ravel(self.lon_e)
+                lat1 = np.ravel(self.lat_g)
+                vals1 = np.ravel(self.centered)
+                pts1 = np.asarray([lon1, lat1]).T
+                interpolator = NearestNDInterpolator(pts1, vals1)
+                
+                lon2in = np.ravel(lon2)
+                lat2in = np.ravel(lat2)
+                pts2in = np.asarray([lon2in, lat2in]).T
+                vals2 = interpolator(pts2in)
+                vals2 = vals2.reshape(lon2.shape)
+            
+            #write data to fits file    
+            hdulist_out = self.im.hdulist
+            hdulist_out[0].header['OBJECT'] = self.target+'_projected'
+            hdulist_out[0].data = vals2
+            hdulist_out[0].writeto(outstem + '_proj.fits', overwrite=True)
+            
+            fig, ax = plt.subplots(1,1, figsize = (10,6))
+        
+            m = basemap.Basemap(rsphere = (self.req, self.rpol), projection='cyl', lon_0=180, ax = ax)
+            m.drawparallels(np.arange(-90.,99.,30.), labels=[1,0,0,0], fontsize=fs, color = 'b')
+            m.drawmeridians(np.arange(-180.,180.,60.), labels=[0,0,0,1], fontsize=fs, color = 'b')
+            m.pcolor(lon2, lat2, vals2, latlon = True, cmap = 'gray')
+            #m.scatter(x2,y2, marker = '.') #shows you where your new points are for testing
+            plt.title(self.date_time)
+            plt.savefig(outstem+'_proj_resample.png', bbox = None)
+            plt.show()
         
         
         
-    '''                  
-    def deproject(self):
-        ''''''
-        projector = Proj(proj='eqc', lon_0 = 0, lat_ts = 0, a = 24764000.0, b = 24341000.0) #Equidistant Cylindrical (Plate Caree)
-        x,y = projector(self.lon_e,self.lat_g,errcheck = False) #no error checking lets invalid values return 1.e30
-        x[np.where(x > 1e29)] = np.nan
-        y[np.where(y > 1e29)] = np.nan
-        x = x.flatten()
-        y = y.flatten()
-        z = self.centered.flatten()
-        interp = interp2d(x,y,z, kind = 'linear')
-        print(interp(50000,100000))
-        #yind = y.argsort()
-        #projected = self.centered[xind]
-        #print(projected.shape)
-        #
-        #plt.imshow(projected, origin = 'lower left')
-        #plt.show()
-    '''
+        

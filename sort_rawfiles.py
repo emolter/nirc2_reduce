@@ -24,8 +24,15 @@ def find_object(obj_name,date):
 def find_filter(fnames, filt_name):
     '''Take in filenames, check filter of all files, return file names that are for
     that filter'''
-    filt = np.asarray([fits.getheader(f, 0, ignore_missing_end=True)['FWINAME'].split(' ')[0].lower() for f in fnames])
-    return fnames[filt == filt_name.split(' ')[0].lower()]
+    #inner filter wheel
+    filti = np.asarray([fits.getheader(f, 0, ignore_missing_end=True)['FWINAME'].split(' ')[0].lower() for f in fnames])
+    #outer filter wheel
+    filto = np.asarray([fits.getheader(f, 0, ignore_missing_end=True)['FWONAME'].split(' ')[0].lower() for f in fnames])
+    fnames_i = fnames[filti == filt_name.split(' ')[0].lower()]
+    fnames_o = fnames[filto == filt_name.split(' ')[0].lower()]
+    if len(fnames_i) > 0:
+        return fnames_i
+    return fnames_o
 
 def get_flats(filt_name, date):
     '''return domeflatoff, domeflaton filenames for filter'''
