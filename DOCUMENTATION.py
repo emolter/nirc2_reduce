@@ -157,9 +157,12 @@ coords.locate_feature(outfile = 'locate.txt')
 coords.bootstrap_func(order = 2)
 
 # to project onto flat
-coords.project(outstem = 'h', resample = True) #, pixsz = 0.009942)
+coords.project(outstem = 'h') #, pixsz = 0.009942)
+coords.plot_projected(outstem = 'h')
 
 # if you already did the edge detection and ran write_latlon, then want to reopen:
+# loads image into self.centered
+# this will also look for a projected image and load that into self.projected
 from nirc2_reduce import coordgrid
 coords = coordgrid.CoordGrid('h_centered.fits', lead_string = 'h')
 coords.plot_latlon()
@@ -171,12 +174,29 @@ coords.plot_latlon()
 # extracting I/F values from a stack of images
 from nirc2_reduce import imstack
 import matplotlib.pyplot as plt
-stack = imstack.Stack(['h_centered.fits', 'kp_centered.fits', 'ch4s_centered.fits', 'pabeta_centered.fits'])
-stack.extract_point(200,200)
-stack.plot('kp','h')
+stack = imstack.Stack(['h_centered.fits', 'kp_centered.fits', 'ch4_short_centered.fits', 'pabeta_centered.fits'])
+stack.extract_point(200,200) #look in locate.txt to find center of storm
+stack.plot_one('kp')
+stack.plot_ratio('kp','h')
 stack.write('kp_over_h.fits', 'kp', 'h')
 
 
+
+
+test
+from nirc2_reduce import coordgrid, imstack
+coords = coordgrid.CoordGrid('h_centered.fits', lead_string = 'h')
+coords.project(outstem = 'h')
+coords = coordgrid.CoordGrid('kp_centered.fits', lead_string = 'kp')
+coords.project(outstem = 'kp')
+coords = coordgrid.CoordGrid('ch4_short_centered.fits', lead_string = 'ch4_short')
+coords.project(outstem = 'ch4_short')
+coords = coordgrid.CoordGrid('pabeta_centered.fits', lead_string = 'pabeta')
+coords.project(outstem = 'pabeta')
+stack = imstack.Stack(['h_proj.fits', 'kp_proj.fits', 'ch4_short_proj.fits', 'pabeta_proj.fits'])
+stack.write('kp_over_h_proj.fits', 'kp', 'h')
+stack.write('h_over_ch4_short_proj.fits', 'h', 'ch4_short')
+stack.write('h_over_pabeta_proj.fits', 'h', 'pabeta')
 
 test
 from nirc2_reduce import multi_reduce

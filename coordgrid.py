@@ -12,7 +12,7 @@ import warnings
 from skimage import feature
 from image_registration.chi2_shifts import chi2_shift
 from image_registration.fft_tools.shift import shiftnd, shift2d
-from scipy.interpolate import interp2d, RectBivariateSpline, NearestNDInterpolator
+from scipy.interpolate import interp2d, RectBivariateSpline, NearestNDInterpolator, griddata
 #from .fit_gaussian import fitgaussian
 from astropy.modeling import models, fitting
 from scipy.ndimage.measurements import center_of_mass
@@ -205,6 +205,10 @@ class CoordGrid:
             self.err_y = Image(lead_string+'_erry.fits').data
             self.centered = self.im.data
             self.model_planet = np.nan_to_num(self.lat_g * 0.0 + 1.0)
+            try:
+                self.projected = Image(lead_string+'_proj.fits').data
+            except:
+                pass
         
         else:
             xcen, ycen = int(imsize_x/2), int(imsize_y/2) #pixels at center of planet
@@ -647,103 +651,120 @@ class CoordGrid:
         plt.show()                                 
         
            
-    def project(self, outstem = 'h', resample = True, pixsz = None, interp = 'nearest'):
+    def project(self, outstem = 'h', pixsz = None, interp = 'cubic'):
         '''Project the data onto a flat x-y grid.
-        Can handle arbitrary map projections
-        projection = "cyl" is a cylindrical equidistant (equirectangular)
-        pixsz is in arcsec'''
+        pixsz is in arcsec. if pixsz = None, translates the pixel scale
+        of the image to a distance at the sub-observer point.
+        interp asks whether to regrid using a nearest neighbor, linear, or cubic'''
         
-        mutf = np.copy(self.mu)
-        mutf[mutf >= 0] = 1.0
-        mutf[mutf != 1.0] = 0.0
+        #determine the number of pixels in resampled image
+        if pixsz == None:
+            pixsz = self.pixscale_arcsec
+        npix_per_degree = (1/self.deg_per_px) * (pixsz / self.pixscale_arcsec) # (old pixel / degree lat) * (arcsec / old pixel) / (arcsec / new pixel) = new pixel / degree lat
+        npix = int(npix_per_degree * 180) + 1 #(new pixel / degree lat) * (degree lat / planet) = new pixel / planet
+        print('New image will be %d by %d pixels'%(2*npix + 1, npix))
+        print('Pixel scale %f km = %f pixels per degree'%(self.pixscale_km, npix_per_degree))
         
+        #create new lon-lat grid
+        extra_wrap_dist = 180
+        newlon, newlat = np.arange(-extra_wrap_dist,360 + extra_wrap_dist, 1/npix_per_degree), np.arange(-90,90, 1/npix_per_degree)
+        gridlon, gridlat = np.meshgrid(newlon, newlat)
+        nans = np.isnan(self.lon_e.flatten())
+        def input_helper(arr, nans):
+            '''removing large region of NaNs speeds things up significantly'''
+            return arr.flatten()[np.logical_not(nans)]
+        inlon, inlat, indat = input_helper(self.lon_e, nans), input_helper(self.lat_g, nans), input_helper(self.centered, nans)
+
+        #fix wrapping by adding dummy copies of small lons at > 360 lon
+        inlon_near0 = inlon[inlon < extra_wrap_dist]
+        inlon_near0 += 360
+        inlon_near360 = inlon[inlon > 360 - extra_wrap_dist]
+        inlon_near360 -= 360
+        inlon_n = np.concatenate((inlon_near360, inlon, inlon_near0))
+        inlat_n = np.concatenate((inlat[inlon > 360 - extra_wrap_dist], inlat, inlat[inlon < extra_wrap_dist]))
+        indat_n = np.concatenate((indat[inlon > 360 - extra_wrap_dist], indat, indat[inlon < extra_wrap_dist]))
+
+        #do the regridding
+        datsort = griddata((inlon_n, inlat_n), indat_n, (gridlon, gridlat), method = interp)
+        
+        #trim extra data we got from wrapping
+        wrap_i_l = len(gridlon[0][gridlon[0] < 0]) - 1
+        wrap_i_u = len(gridlon[0][gridlon[0] >= 360])
+        datsort = datsort[:,wrap_i_l:-wrap_i_u]
+        gridlon = gridlon[:,wrap_i_l:-wrap_i_u]
+        gridlat = gridlat[:,wrap_i_l:-wrap_i_u]
+        
+        # make far side of planet into NaNs
+        snorm = surface_normal(gridlat, gridlon, self.ob_lon)
+        emang = emission_angle(self.ob_lat, snorm).T
+        farside = np.where(emang < 0.0)
+        datsort[farside] = np.nan
+        self.projected = datsort
+        
+        #write data to fits file    
+        hdulist_out = self.im.hdulist
+        hdulist_out[0].header['OBJECT'] = self.target+'_projected'
+        hdulist_out[0].data = datsort
+        hdulist_out[0].writeto(outstem + '_proj.fits', overwrite=True)
+        print('Writing file %s'%outstem + '_proj.fits')
+        
+    def plot_projected(self, outstem):
+        '''Once projection has been run, plot it using this function'''    
+        #plot it
+        fs = 14 #fontsize for plots
+        parallels = np.arange(-90.,99.,30.)
+        meridians = np.arange(0.,390.,60.)
+        fig, ax0 = plt.subplots(1,1, figsize = (10,7))
+        
+        ax0.imshow(self.projected, origin = 'lower left', extent = [0, 360, -90, 90], cmap = 'gray')
+        for loc in parallels:
+            ax0.axhline(loc, color = 'cyan', linestyle = ':')
+        for loc in meridians:
+            ax0.axvline(loc, color = 'cyan', linestyle = ':')
+
+        ax0.set_xlabel('Longitude', fontsize = fs)
+        ax0.set_ylabel('Latitude', fontsize = fs)
+        ax0.set_xticks(meridians)
+        ax0.set_yticks(parallels)
+        ax0.set_title(self.date_time, fontsize = fs + 2)
+        ax0.tick_params(which = 'both', labelsize = fs - 2)
+        
+        plt.savefig(outstem+'_proj.png', bbox = None)
+        plt.show()
+        
+        
+        
+        
+        
+        ''' 
+    def change_projection(self):
+        not written yet but would use basemap to reproject arbitrarily
+        
+         
         fs = 14 #fontsize for plots
         fig = plt.figure(figsize = (10,10))
         ax0 = plt.subplot2grid((5,5),(0,0), colspan = 5, rowspan = 3)
         ax1 = plt.subplot2grid((5,5), (3,0), colspan = 2, rowspan = 2)
-        ax2 = plt.subplot2grid((5,5), (3, 3), colspan = 2, rowspan = 2)
+        ax2 = plt.subplot2grid((5,5), (3, 3), colspan = 2, rowspan = 2)      
+        m0 = basemap.Basemap(rsphere = (self.req, self.rpol), projection='cyl', ax = ax0, lon_0 = 180) #do not, under any circumstances, change lon_0 from 0 or let plotted longitudes outside -180, 180
+        m0.pcolormesh(gridlon, gridlat, datsort, cmap = 'gray')
         
-        #initialize basemap and overlay image
-        m0 = basemap.Basemap(rsphere = (self.req, self.rpol), projection='cyl', lon_0=180, ax = ax0)
-        m0.pcolor(self.lon_e, self.lat_g, self.centered, latlon = True, cmap = 'gray')
-        
-        #add pretty stuff
         m0.drawparallels(np.arange(-90.,99.,30.), labels=[1,0,0,0], fontsize=fs, color = 'cyan')
         m0.drawmeridians(np.arange(-180.,180.,60.), labels=[0,0,0,1], fontsize=fs, color = 'cyan')
-        
+
         m1 = basemap.Basemap(rsphere = (self.req, self.rpol), projection='npstere', boundinglat=30, lon_0=180, ax = ax1)
         m1.drawparallels(np.arange(-90.,99.,30.), labels=[1,1,1,1], fontsize=fs, color = 'cyan')
         m1.drawmeridians(np.arange(-180.,180.,60.), labels=[1,1,1,1], fontsize=fs, color = 'cyan') 
-        m1.pcolor(self.lon_e, self.lat_g, self.centered, latlon = True, cmap = 'gray') 
-        m1.pcolor(self.lon_e, self.lat_g, mutf, latlon = True, cmap = 'gray')       
+        m1.pcolor(gridlon, gridlat, datsort, latlon = True, cmap = 'gray')       
         
         m2 = basemap.Basemap(rsphere = (self.req, self.rpol), projection='spstere', boundinglat=-30, lon_0=180, ax = ax2)
         m2.drawparallels(np.arange(-90.,99.,30.), labels=[1,1,1,1], fontsize=fs, color = 'cyan')
         m2.drawmeridians(np.arange(-180.,180.,60.), labels=[1,1,1,1], fontsize=fs, color = 'cyan')
-        m2.pcolor(self.lon_e, self.lat_g, self.centered, latlon = True, cmap = 'gray')
+        m2.pcolor(gridlon, gridlat, datsort, latlon = True, cmap = 'gray')
         
         ax0.set_title(self.date_time, fontsize = fs + 2)
         plt.subplots_adjust(hspace = 1.0, wspace = -0.4)
         plt.savefig(outstem+'_proj.png', bbox = None)
         plt.show()
-        
-        ## Do a map of the distortions from projection:
-        ##     emission angle effects
-        ##     tissot indicatrices
-                
-        #x,y = m(self.lon_e, self.lat_g) #might be useful later
-        if resample:
-            '''TO DO HERE:
-            Carry NaNs on regions where there is no lat-lon coverage over
-                    to the reprojected image
-            Write functions that take advantage of the fact it is deprojected?
-                    Else save this for another package of functions'''
-            
-            #determine the number of pixels in resampled image
-            if pixsz == None:
-                pixsz = self.pixscale_arcsec
-            npix_per_degree = (1/self.deg_per_px) * (pixsz / self.pixscale_arcsec) # (old pixel / degree lat) * (arcsec / old pixel) / (arcsec / new pixel) = new pixel / degree lat
-            npix = int(npix_per_degree * 180) #(new pixel / degree lat) * (degree lat / planet) = new pixel / planet
-            print('New image will be %d by %d pixels'%(2*npix, npix))
-
-            lon2, lat2, x2, y2 = m.makegrid(npix*2, npix, returnxy = True)
-            
-            if interp == 'linear':
-                print('Linear interp chosen. warning: this will take a very long time')
-                interpolator = interp2d(self.lon_e, self.lat_g, self.centered, kind = 'linear')
-                vals2 = interpolator(lon2, lat2)
-            
-            elif interp == 'nearest':
-                print('Performing nearest neighbor interpolation. Takes about a minute for a 1000 x 500 grid')
-                lon1 = np.ravel(self.lon_e)
-                lat1 = np.ravel(self.lat_g)
-                vals1 = np.ravel(self.centered)
-                pts1 = np.asarray([lon1, lat1]).T
-                interpolator = NearestNDInterpolator(pts1, vals1)
-                
-                lon2in = np.ravel(lon2)
-                lat2in = np.ravel(lat2)
-                pts2in = np.asarray([lon2in, lat2in]).T
-                vals2 = interpolator(pts2in)
-                vals2 = vals2.reshape(lon2.shape)
-            
-            #write data to fits file    
-            hdulist_out = self.im.hdulist
-            hdulist_out[0].header['OBJECT'] = self.target+'_projected'
-            hdulist_out[0].data = vals2
-            hdulist_out[0].writeto(outstem + '_proj.fits', overwrite=True)
-            
-            fig, ax = plt.subplots(1,1, figsize = (10,6))
-        
-            m = basemap.Basemap(rsphere = (self.req, self.rpol), projection='cyl', lon_0=180, ax = ax)
-            m.drawparallels(np.arange(-90.,99.,30.), labels=[1,0,0,0], fontsize=fs, color = 'b')
-            m.drawmeridians(np.arange(-180.,180.,60.), labels=[0,0,0,1], fontsize=fs, color = 'b')
-            m.pcolor(lon2, lat2, vals2, latlon = True, cmap = 'gray')
-            #m.scatter(x2,y2, marker = '.') #shows you where your new points are for testing
-            plt.title(self.date_time)
-            plt.savefig(outstem+'_proj_resample.png', bbox = None)
-            plt.show()
-        
-        
-        
+        '''        
         

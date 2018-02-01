@@ -42,7 +42,8 @@ def multiBxy3(date, target_name, filt_list, flatfilt_list):
             except:
                 nproblems += 1
                 print('ERROR: something went wrong internally with filter %s'%filt_name)
-                print('Recommend deleting any associated files and trying manual reduction')
+                print('Ensure flat and bad pixel map files exist in outdir')
+                print('Else recommend trying manual reduction to find bug')
             
     print('Finished! Errors detected in %d filters... skipped these'%nproblems)
 

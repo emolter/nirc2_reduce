@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-from nirc2_reduce import coordgrid
+from nirc2_reduce import image
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -24,8 +24,8 @@ class Stack:
         '''fnames should be a list of filt_centered.fits files'''
         stack = {} #dict in format filter:CoordGrid object
         for fn in fnames:
-            leadstr = fn.split('_')[0]
-            stack[leadstr] = coordgrid.CoordGrid(fn, lead_string = leadstr)
+            key = '_'.join(fn.split('_')[:-1])
+            stack[key] = image.Image(fn)
         self.stack = stack
         
         '''Make images of filter ratios. For every possible combination of
@@ -36,20 +36,20 @@ class Stack:
         for i in range(len(self.filts)):
             for j in range(len(self.filts)):
                 if i != j:
-                    im1 = self.stack[self.filts[i]]
-                    im2 = self.stack[self.filts[j]]
+                    im1 = self.stack[self.filts[i]].data
+                    im2 = self.stack[self.filts[j]].data
                     ratio_key = self.filts[i]+'/'+self.filts[j]
-                    ratioim = im1.centered/im2.centered
-                    #invalidate points off planet - use h band by default since edge detection usually works faithfully there, but don't fail if no h band
-                    if 'h' in self.filts:
-                        ratioim[np.isnan(self.stack['h'].lat_g)] = 0 
-                    else:
-                        ratioim[np.isnan(self.stack[self.filts[0]].lat_g)] = 0 #invalidates points off planet
+                    ratioim = im1/im2
                     ratios[ratio_key] = ratioim         
         self.ratios = ratios
         print('Image stack object created with filters {}'.format(self.filts))
+    
+    def plot_one(self, filt):
+        im = self.stack[filt]
+        plt.imshow(im.data, origin = 'lower left')
+        plt.show()
         
-    def plot(self, filt1, filt2):
+    def plot_ratio(self, filt1, filt2):
         ratioim = self.ratios[filt1+'/'+filt2]
         fig, ax = plt.subplots(1,1, figsize = (9,9))
         ax.imshow(ratioim, origin = 'lower left')
@@ -57,7 +57,7 @@ class Stack:
         
     def write(self, fname, filt1, filt2):
         ratioim = self.ratios[filt1+'/'+filt2]
-        hdulist_out = self.stack[filt1].im.hdulist
+        hdulist_out = self.stack[filt1].hdulist
         hdulist_out[0].header['OBJECT'] = 'ratio_'+filt1+'/'+filt2
         hdulist_out[0].data = ratioim
         hdulist_out[0].writeto(fname, overwrite=True)

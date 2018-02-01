@@ -65,7 +65,11 @@ class Filt:
         out = []
         for val in w:
             if ( self.wl[0] < val ) & ( val < self.wl[-1] ):
-                out.append(self.interp_f(val))
+                interpval = self.interp_f(val)
+                if interpval > 0:
+                    out.append(self.interp_f(val))
+                else:
+                    out.append(0)
             else:
                 out.append(0)
         return np.asarray(out)

@@ -41,14 +41,14 @@ def naif_lookup(target):
         try:
             code
         except:
-            print('WARN: NAIF code not in lookup table. If code fails, ensure target can be queried in Horizons.')
+            print('WARN (get_ephem): NAIF code not in lookup table. If code fails, ensure target can be queried in Horizons.')
             code = target
                             
     if len(code) == 7: #minor body
         if code[0] == '2': #asteroid
             return code[1:]+';'
         elif code[0] =='1': #comet
-            sys.exit('ERROR: Comets cannot be looked up by NAIF ID; Horizons generates multiple codes for every comet. Try your search in the Horizons Web tool, select the target body you want, and then copy the exact string into this code and it *may* work.')
+            sys.exit('ERROR (get_ephem): Comets cannot be looked up by NAIF ID; Horizons generates multiple codes for every comet. Try your search in the Horizons Web tool, select the target body you want, and then copy the exact string into this code and it *may* work.')
         return code
     return code
 
@@ -77,7 +77,10 @@ def get_ephemerides(code, obs_code, tstart, tend, stepsize) :
     csv        = "&CSV_FORMAT='YES'"
 
     url = http+make_ephem+command+center+t_start+t_stop+t_step+quantities+csv
-    ephem = urlopen( url ).readlines()
+    try:
+        ephem = urlopen( url ).readlines()
+    except:
+        sys.exit('ERROR (get_ephem): Could not retrieve query from Horizons. Check Internet connection and input URL')
 
     inephem = False
     data = []
@@ -103,4 +106,4 @@ def get_ephemerides(code, obs_code, tstart, tend, stepsize) :
         out = np.asarray(data)[:,:-1]
         return out, observatory_coords
     except:
-        sys.exit('ERROR: Ephemeris data not found. Check that the target has valid ephemeris data for the specified time range.')
+        sys.exit('ERROR (get_ephem): Ephemeris data not found. Check that the target has valid ephemeris data for the specified time range.')
