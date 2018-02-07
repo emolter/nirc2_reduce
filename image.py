@@ -31,3 +31,8 @@ class Image:
     def plot(self):
         plt.imshow(self.data,origin='lower left')
         plt.show()
+        
+    def write(self, fname):
+        self.hdulist[0].header = self.header
+        self.hdulist[0].data = self.data
+        self.hdulist.writeto(fname, overwrite = True)

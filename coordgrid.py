@@ -3,6 +3,7 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
+from mpl_toolkits.axes_grid1 import make_axes_locatable
 from astropy.io import fits
 from .get_ephem import get_ephemerides, naif_lookup
 from nirc2_reduce.image import Image
@@ -18,7 +19,7 @@ from astropy.modeling import models, fitting
 from scipy.ndimage.measurements import center_of_mass
 from scipy.ndimage.interpolation import zoom
 
-from mpl_toolkits import basemap
+#from mpl_toolkits import basemap
 import pyproj
 
 
@@ -708,15 +709,31 @@ class CoordGrid:
         hdulist_out[0].writeto(outstem + '_proj.fits', overwrite=True)
         print('Writing file %s'%outstem + '_proj.fits')
         
-    def plot_projected(self, outstem):
-        '''Once projection has been run, plot it using this function'''    
+    def plot_projected(self, outfname, ctrlon = 180, lat_limits = [-90, 90], lon_limits = [0, 360], cbarlabel = 'I/F'):
+        '''Once projection has been run, plot it using this function'''  
+        
+        #apply center longitude to everything
+        npix = self.projected.shape[1]
+        npix_per_degree = 1.0 / self.deg_per_px
+        print(npix_per_degree)
+        offset = (ctrlon + 180)%360
+        offsetpix = np.round(offset*npix_per_degree)
+        uoffsetpix = npix - offsetpix
+        newim = np.copy(self.projected)
+        lefthalf = self.projected[:,:offsetpix]
+        righthalf = self.projected[:,offsetpix:]
+        newim[:,uoffsetpix:] = lefthalf #switch left and right halves
+        newim[:,:uoffsetpix] = righthalf
+        
+        extent = [ctrlon - 180, ctrlon + 180, -90, 90]
+        parallels = np.arange(lat_limits[0],lat_limits[1] + 30, 30.)
+        meridians = np.arange(lon_limits[0],lon_limits[1] + 60, 60.)
+          
         #plot it
         fs = 14 #fontsize for plots
-        parallels = np.arange(-90.,99.,30.)
-        meridians = np.arange(0.,390.,60.)
         fig, ax0 = plt.subplots(1,1, figsize = (10,7))
         
-        ax0.imshow(self.projected, origin = 'lower left', extent = [0, 360, -90, 90], cmap = 'gray')
+        cim = ax0.imshow(newim, origin = 'lower left', extent = extent, cmap = 'gray')
         for loc in parallels:
             ax0.axhline(loc, color = 'cyan', linestyle = ':')
         for loc in meridians:
@@ -724,12 +741,19 @@ class CoordGrid:
 
         ax0.set_xlabel('Longitude', fontsize = fs)
         ax0.set_ylabel('Latitude', fontsize = fs)
-        ax0.set_xticks(meridians)
-        ax0.set_yticks(parallels)
+        ax0.set_ylim(lat_limits)
+        ax0.set_xlim(lon_limits)
         ax0.set_title(self.date_time, fontsize = fs + 2)
         ax0.tick_params(which = 'both', labelsize = fs - 2)
         
-        plt.savefig(outstem+'_proj.png', bbox = None)
+        #plot the colorbar
+        divider = make_axes_locatable(ax0)
+        cax = divider.append_axes('right', size='5%', pad=0.05)
+        cbar = fig.colorbar(cim, cax = cax, orientation = 'vertical')
+        cbar.set_label(cbarlabel, fontsize = fs)
+        cax.tick_params(which = 'both', labelsize = fs - 2)
+        
+        plt.savefig(outfname, bbox = None)
         plt.show()
         
         

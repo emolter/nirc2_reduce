@@ -210,4 +210,12 @@ dist_list = [100, 100, 100, 100, 100]
 multi_reduce.multiPhot(date, target_name, filt_list, mag_list, flatfilt_list, doplots = True, dist_list = dist_list)
 #multi_reduce.multiApplyPhot(date, airmass)
 
+from nirc2_reduce import coordgrid
+coords = coordgrid.CoordGrid('stacked_nophot_h.fits')
+coords.edge_detect(low_thresh = 0.01, high_thresh = 0.05, sigma = 5)
+coords.write('h')
 
+from nirc2_reduce import coordgrid
+coords = coordgrid.CoordGrid('h_centered.fits', lead_string = 'h')
+coords.project(outstem = 'h')
+coords.plot_projected('h_proj.png', ctrlon = 180, lat_limits = [-60, 60], lon_limits = [0, 360])
