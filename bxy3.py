@@ -254,4 +254,35 @@ class Bxy3:
             plt.tight_layout()
             fig.savefig(png_file,bbox='None')
             plt.close()
+            
+    def help(self):
+        
+        helpstr = '''
+        Contains tasks for reducing data taken with the Keck bxy3 dither
+        
+        Functions (see DOCUMENTATION.py for use):
+            make_sky(self,outfile)
+            apply_sky(self,fname)
+            apply_flat(self,fname)
+            apply_badpx_map(self,fname)
+            dewarp(self)
+            trim(self)
+            remove_cosmic_rays(self)
+            per_second(self)
+            apply_photometry_frames(self,flux_per)
+            apply_photometry_final(self,flux_per)
+            stack(self)
+            crop(self,bw)
+            write_frames(self,outfiles)
+            plot_frames(self)
+            write_final(self,outfile,png = False,png_file='')
+             
+        Attributes:
+            dummy_fits: Image object used to hijack header info
+            frames: the three grids of image data. this gets updated in every step
+            subc: size of image array
+            target: name of planet
+            sky: master sky map produced by make_sky
+        '''
+        print(helpstr)
 

@@ -140,3 +140,30 @@ class Nod:
             plt.tight_layout()
             fig.savefig(png_file,bbox='None')
             plt.close()
+            
+    def help(self):
+        
+        helpstr = '''
+        Contains tasks for reducing data taken with a target/sky nod
+        
+        Functions (see DOCUMENTATION.py for use):
+            apply_sky(self,fname)
+            apply_flat(self,fname)
+            apply_badpx_map(self,fname)
+            dewarp(self)
+            remove_cosmic_rays(self)
+            per_second(self)
+            apply_photometry(self,flux_per)
+            crop(self,bw)
+            uranus_crop(self, bw)
+            write(self,outfile,png = False,png_file='')
+             
+        Attributes:
+            image: Image object used to hijack header info
+            data: the image data. this gets updated in every step
+            sky: the sky data
+            subc: size of image array
+            target: name of planet
+        '''
+        
+        print(helpstr)

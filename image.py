@@ -36,3 +36,21 @@ class Image:
         self.hdulist[0].header = self.header
         self.hdulist[0].data = self.data
         self.hdulist.writeto(fname, overwrite = True)
+        
+    def help(self):
+        
+        helpstr = '''
+        Simple object containing a nirc2 image
+        
+        Functions:
+            plot(self)
+            write(self, fname)
+             
+        Attributes:
+            hdulist: .fits format hdulist structure
+            header: image header, dictionary-like
+            data: the image data
+            target: name of planet
+            filt: filter in which image was taken
+        '''
+        print(helpstr)

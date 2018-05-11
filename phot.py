@@ -147,6 +147,25 @@ class bxy3Phot(Bxy3):
         if verbose:
             print('all values ', flux_per)
             print('Median flux per = ',self.flux_per)
+            
+    def help(self):
+        
+        helpstr = '''
+        Contains tasks to reduce standard star observations taken with the
+            keck bxy3 dither, and extract photometric information
+        
+        Functions (see DOCUMENTATION.py for use):
+            reduce(self,skyfname,flatfname,badpxfname,outfnames)
+            find_cts(self, dist = 50, plot = True)
+            find_flux_conversion(self, star_mag, keck_filt, verbose = False)
+             
+        Attributes:
+            *In addition to below list, contains all attributes of Bxy3 object
+            star_cts: number of total cts s-1 from the star for each frame
+            all_flux_per: flux per second for each frame, units erg s-1 cm-2 um-1 / cts s-1
+            flux_per: flux per second averaged over the three frames, units erg s-1 cm-2 um-1 / cts s-1
+        '''
+        print(helpstr)
         
         
 class nodPhot(Nod):
@@ -212,4 +231,22 @@ class nodPhot(Nod):
         factor = get_factor(keck_filt) #vega flux in keck filter / vega flux in catalog filter
         flux_star = flux_vega * (1/factor) * 10**(-(1/2.5)*star_mag)
         self.flux_per =  flux_star/self.star_cts #units erg s-1 cm-2 um-1 / cts s-1
+        
+    def help(self):
+        
+        helpstr = '''
+        Contains tasks to reduce standard star observations taken with the
+            a target/sky nod, and extract photometric information
+        
+        Functions (see DOCUMENTATION.py for use):
+            reduce(self, flatfname,badpxfname,outfname)
+            find_cts(self, dist = 50, plot = True)
+            find_flux_conversion(self, star_mag, keck_filt)
+             
+        Attributes:
+            *In addition to below list, contains all attributes of Nod object
+            star_cts: number of total cts s-1 from the star
+            flux_per: flux per second, units erg s-1 cm-2 um-1 / cts s-1
+        '''
+        print(helpstr)
            

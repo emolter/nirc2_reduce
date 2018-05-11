@@ -124,6 +124,28 @@ class Stack:
         for rstr in sorted(which):
             flux = self.ratios[rstr][x,y]
             print(rstr + '    ' + str(flux))
+            
+    def help(self):
+        
+        helpstr = '''
+        Contains tasks for extracting information from a stack of images
+             taken in different nirc2 filters. relies on naming conventions
+             output by coordgrid.py to load things properly
+        
+        Functions (see DOCUMENTATION.py for use):
+            plot_one(self, filt)
+            plot_ratio(self, filt1, filt2)
+            write(self, fname, filt1, filt2)
+            extract_point(self, x, y)
+            extract_feature(self, frac, which = 'all')
+             
+        Attributes:
+            stack: list of images
+            filts: list of filters for the images
+            wls_eff: list of effective wavelengths for the filters
+            ratios: all of the flux ratios as a dict, e.g. ratios['kp/h'] = float
+        '''
+        print(helpstr)
     
     
     

@@ -762,39 +762,68 @@ class CoordGrid:
         plt.savefig(outfname, bbox = None)
         plt.show()
         
+    def help(self):
+        
+        helpstr = '''
+        Contains tasks for image navigation, image projection, calculating I/F, and
+        other things that require Horizons ephemeris data to compute
+        
+        Functions (see DOCUMENTATION.py for use):
+            ioverf(self, filt, flux_per, stand_airmass)
+            write_photonly(self, outstr)
+            edge_detect(self, low_thresh = 0.01, high_thresh = 0.05, sigma = 5, plot = True)
+            edge_detect_error(self, niter, perturb_l, perturb_dist, low_thresh = 0.002, dist = 0.02, sigma = 5, doplot = True)
+            manual_shift(self,dx,dy)
+            plot_latlon(self)
+            write(self, lead_string)
+            bootstrap_func(self, order = 2)
+            locate_feature(self, outfile=None)
+            project(self, outstem = 'h', pixsz = None, interp = 'cubic')
+            plot_projected(self, outfname, ctrlon = 180, lat_limits = [-90, 90], lon_limits = [0, 360], cbarlabel = 'I/F')
+             
+        Attributes:
+            im: image object for infile
+            req: equatorial radius
+            rpol: polar radius
+            data: the image data
+            pixscale_arcsec: pixel scale of image in arcsec
+            target: name of planet
+            date_time: datetime object for start time
+            airmass:
+            ang_diam:
+            ob_lon: sub observer longitude
+            ob_lat: sub observer latitude
+            sun_lon: sub solar longitude
+            sun_lat: sub solar latitude
+            np_ang: north pole position angle (CCW, or east, wrt celestial north)
+            np_dist: angular dist of np from sub observer point
+            sun_dist: distance from target to sun
+            dist: distance from target to observer       
+            pixscale_km: pixel scale of image in km
+            deg_per_px: lat/lon degrees on planet per pixel at sub obs point
+            lat_g: grid of planetographic latitudes on planet
+            lat_c: grid of planetocentric latitudes on planet
+            lon_e: grid of east longitudes on planet
+            err_x: lat/lon error from navigation in x direction, in px
+            err_y: lat/lon error from navigation in y direction, in px
+            centered: centered data after edge detection
+            model_planet: ellipse with planet's projected shape based on ephemeris
+            projected: image on regular lat/lon grid after projection
+            mu: grid of emission angles on planet
+            surf_n: grid of normal vectors to the surface of planet
+            x_shift: pixel shift in x direction from edge detect
+            y_shift: pixel shift in x direction from edge detect
+            edges: map of edges found by edge detect
+        '''
+        print(helpstr)
+        
         
         
         
         
         ''' 
     def change_projection(self):
-        not written yet but would use basemap to reproject arbitrarily
+        not written yet but would use basemap, or Charles Goullaud replacement, to reproject arbitrarily
         
-         
-        fs = 14 #fontsize for plots
-        fig = plt.figure(figsize = (10,10))
-        ax0 = plt.subplot2grid((5,5),(0,0), colspan = 5, rowspan = 3)
-        ax1 = plt.subplot2grid((5,5), (3,0), colspan = 2, rowspan = 2)
-        ax2 = plt.subplot2grid((5,5), (3, 3), colspan = 2, rowspan = 2)      
-        m0 = basemap.Basemap(rsphere = (self.req, self.rpol), projection='cyl', ax = ax0, lon_0 = 180) #do not, under any circumstances, change lon_0 from 0 or let plotted longitudes outside -180, 180
-        m0.pcolormesh(gridlon, gridlat, datsort, cmap = 'gray')
-        
-        m0.drawparallels(np.arange(-90.,99.,30.), labels=[1,0,0,0], fontsize=fs, color = 'cyan')
-        m0.drawmeridians(np.arange(-180.,180.,60.), labels=[0,0,0,1], fontsize=fs, color = 'cyan')
-
-        m1 = basemap.Basemap(rsphere = (self.req, self.rpol), projection='npstere', boundinglat=30, lon_0=180, ax = ax1)
-        m1.drawparallels(np.arange(-90.,99.,30.), labels=[1,1,1,1], fontsize=fs, color = 'cyan')
-        m1.drawmeridians(np.arange(-180.,180.,60.), labels=[1,1,1,1], fontsize=fs, color = 'cyan') 
-        m1.pcolor(gridlon, gridlat, datsort, latlon = True, cmap = 'gray')       
-        
-        m2 = basemap.Basemap(rsphere = (self.req, self.rpol), projection='spstere', boundinglat=-30, lon_0=180, ax = ax2)
-        m2.drawparallels(np.arange(-90.,99.,30.), labels=[1,1,1,1], fontsize=fs, color = 'cyan')
-        m2.drawmeridians(np.arange(-180.,180.,60.), labels=[1,1,1,1], fontsize=fs, color = 'cyan')
-        m2.pcolor(gridlon, gridlat, datsort, latlon = True, cmap = 'gray')
-        
-        ax0.set_title(self.date_time, fontsize = fs + 2)
-        plt.subplots_adjust(hspace = 1.0, wspace = -0.4)
-        plt.savefig(outstem+'_proj.png', bbox = None)
-        plt.show()
         '''        
         

@@ -9,7 +9,8 @@ File structure setup:
         -Start Python in directory that contains "raw" and "reduced" dirs
     -For navigation and analysis navigate to reduced/DATE/ and then start Python
 
-For help, call class.help() for any class, e.g. coordgrid, bxy3, imstack
+For list of attributes in a class, call class.help()
+    Works for Bxy3, bxy3Phot, CoordGrid, Filt, Flat, Image, Stack, Nod, nodPhot
 
 Workflows in this document:
 1. Reducing data that were taken with the Keck bxy3 dither pattern
@@ -22,6 +23,7 @@ Workflows in this document:
 8. Converting navigated image to I/F
 9. Image projection onto a regular lat/lon grid
 10. Extracting information from a stack of images taken in different filters
+11. Extracting full-sized individual reduced frames with photometry, e.g. for moon photometry
 999. Miscellaneous coordGrid tasks
 '''
 
@@ -169,7 +171,7 @@ stand.reduce(outdir+'flat_master_'+keck_filt+'.fits', outdir+'badpx_map_'+keck_f
 # get photometry
 stand.find_cts(50, plot = True) #first number is radius in pixels within which to add up flux
 stand.find_flux_conversion(star_mag, keck_filt)
-print(stand.flux_per) #flux per second in CGS units, i.e. cts s-1 / erg s-1 cm-2 um-1
+print(stand.flux_per) #flux per second in CGS units, i.e. erg s-1 cm-2 um-1 / cts s-1
 # remember to put this number into the photometry_history spreadsheet on Ned's Google Drive
 
 # apply photometry onto the already reduced obs object
@@ -245,7 +247,7 @@ coords.plot_latlon()
 
 from nirc2_reduce import coordgrid
 filt = 'h'
-flux_per = 9.3e-17 #cts s-1 / erg s-1 cm-2 um-1
+flux_per = 9.3e-17 #erg s-1 cm-2 um-1 / cts s-1
 stand_airmass = 1.10
 coords = coordgrid.CoordGrid('h_centered.fits', lead_string = 'h')
 coords.ioverf(filt, flux_per, stand_airmass)

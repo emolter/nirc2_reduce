@@ -54,3 +54,22 @@ class Flats:
         hdulist_out[0].data = self.badpx_map
         hdulist_out[0].writeto(outfile, overwrite=True)
         
+    def help(self):
+        
+        helpstr = '''
+        Contains tasks for making flatfield and badpx maps
+        
+        Functions (see DOCUMENTATION.py for use):
+            write(self,outfile)
+            plot(self)
+            make_badpx_map(self, outfile, tol, blocksize)
+             
+        Attributes:
+            dummy_fits: Image object used to hijack header info
+            frames_off: list of frames taken in a filter with the dome lights off
+            frames_on: list of frames taken in a filter with the dome lights on
+            flat: the flatfield
+            badpx_map: the bad pixel map
+        '''
+        print(helpstr)
+        

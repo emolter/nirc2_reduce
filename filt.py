@@ -73,6 +73,28 @@ class Filt:
             else:
                 out.append(0)
         return np.asarray(out)
+        
+    def help(self):
+        
+        helpstr = '''
+        Contains nirc2 filter transmission data and simple tasks for querying it
+        
+        Functions:
+            load_data(self)
+            plot(self)
+            find_vega_flux(self)
+            eval(self,w)
+             
+        Attributes:
+            filtname: name of filter
+            wl: list of wls in microns
+            trans: normalized transmission in filter at each wl
+            wl_eff: effective wl of filt
+            interp_f: interpolation function takes in given wl and outputs trans at that wl
+            vega_flux: flux of vega in the filter as calculated by find_vega_flux
+            sun_flux: flux of sun in the filter as calculated by find_sun_flux
+        '''
+        print(helpstr)
             
 class Spectrum:
     
@@ -102,6 +124,21 @@ class Spectrum:
         trans = filter_object.eval(self.wl)
         flux = np.sum(trans*self.flux)/(np.sum(trans))
         return flux
+        
+    def help(self):
+        
+        helpstr = '''
+        Simple wrapper for 2-column spectra, helps Filt object
+        
+        Functions:
+            plot(self)
+            flux_in_filter(self,filt)
+             
+        Attributes:
+            wl: wavelengths
+            flux: fluxes
+        '''
+        print(helpstr)
 
 
         
