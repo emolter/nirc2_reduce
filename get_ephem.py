@@ -62,8 +62,12 @@ def get_ephemerides(code, obs_code, tstart, tend, stepsize) :
     """
 
     tstart_obj = datetime.strptime(tstart,'%Y-%m-%d %H:%M')
-    tstart_UT = datetime.strftime(tstart_obj,"'%Y-%m-%d %H:%M'")
     tend_obj = datetime.strptime(tend,'%Y-%m-%d %H:%M')
+    if tend_obj - tstart_obj <= timedelta(minutes = 1):
+        print('End time before start time. Setting end time to one minute after start time.')
+        tend_obj = tstart_obj + timedelta(minutes = 1)
+    
+    tstart_UT = datetime.strftime(tstart_obj,"'%Y-%m-%d %H:%M'")
     tend_UT = datetime.strftime(tend_obj,"'%Y-%m-%d %H:%M'")
 
     http = "http://ssd.jpl.nasa.gov/horizons_batch.cgi?batch=1"

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from . import sort_rawfiles, bxy3, phot, flats, image, coordgrid
+from . import sort_rawfiles, bxy3, phot, flats, image, coordgrid, nod
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -68,6 +68,86 @@ def multiBxy3Plot(date, filt_list):
         ax.set_yticks([])
         
     plt.show()
+
+
+def multiNod(date, target_name, filt_list, flatfilt_list):
+    '''Do nod for many filters without human intervention'''
+    outdir = 'reduced/'+date+'/'
+    imagefiles_all = sort_rawfiles.find_object(target_name,date)
+    skyfiles_all = sort_rawfiles.find_object('sky',date)
+    
+    nproblems = 0
+    for i in range(len(filt_list)):
+        filt_name = filt_list[i]
+        flat_filt = flatfilt_list[i]
+        print('Starting filter %s (%d/%d)'%(filt_name, i+1, len(filt_list)))
+        try:
+            imagef = sort_rawfiles.find_filter(imagefiles_all, filt_name)
+        except:
+            nproblems += 1
+            print('ERROR: Did not find any images in filter %s'%filt_name)
+            print('Skipping this filter')
+            continue
+        try:
+            skyf = sort_rawfiles.find_filter(skyfiles_all, filt_name)
+        except:
+            nproblems += 1
+            print('ERROR: Did not find any sky frames in filter %s'%filt_name)
+            print('Skipping this filter')
+            continue
+        #check that it is a bxy3
+        if len(imagef) != 1:
+            nproblems += 1
+            print('ERROR: found %d image files for filt %s (1 required)'%(len(imagef),filt_name))
+            print('Skipping this filter')
+        elif len(skyf) != 1:
+            nproblems += 1
+            print('ERROR: found %d sky files for filt %s (1 required)'%(len(skyf),filt_name))
+            print('Skipping this filter')            
+        else:
+            try:
+                #do full data reduction for that filter
+                obs = nod.Nod(skyf[0], imagef[0])
+                obs.apply_sky()
+                obs.apply_flat(outdir+'flat_master_'+flat_filt+'.fits')
+                obs.apply_badpx_map(outdir+'badpx_map_'+flat_filt+'.fits')
+                obs.dewarp()
+                obs.remove_cosmic_rays()
+                obs.per_second()
+                obs.write(outdir+'stacked_nophot_'+filt_name+'.fits', png = False)
+                print('Finished filter %s'%filt_name)
+            except:
+                nproblems += 1
+                print('ERROR: something went wrong internally with filter %s'%filt_name)
+                print('Ensure flat and bad pixel map files exist in outdir')
+                print('Else recommend trying manual reduction to find bug')
+            
+    print('Finished! Errors detected in %d filters... skipped these'%nproblems)    
+    
+def multiNodPlot(date, filt_list):
+    '''Plot results of multiNod'''
+    outdir = 'reduced/'+date+'/'
+    gridsz = int(np.sqrt(len(filt_list))) + 1
+    
+    fig, axes = plt.subplots(gridsz, gridsz, figsize = (9,9))
+    fig.subplots_adjust(hspace = 0.2, wspace = 0.01)
+    axes = axes.flatten()
+    for j in range(len(filt_list)):
+        ax = axes[j]
+        filt_name = filt_list[j]
+        fname = outdir+'stacked_nophot_'+filt_name+'.fits'
+        img = image.Image(fname).data
+        ax.imshow(img, origin = 'lower left')
+        ax.set_title(filt_name)
+    for ax in axes:
+        ax.set_xticks([])
+        ax.set_yticks([])
+        
+    plt.show()    
+    
+    
+    
+    
         
         
 #####################

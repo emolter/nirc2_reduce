@@ -122,6 +122,13 @@ class Nod:
         szx,szy = self.data.shape[0],self.data.shape[1]
         self.data = self.data[bw:szx-bw,bw:szy-bw]
         
+    def uranus_crop(self, bw):
+        '''Custom crop for Uranus data. We use the right side of the
+        NIRC2 detector to avoid the bad pixels in the lower left corner
+        so just cut that out'''
+        szx,szy = self.data.shape[0],self.data.shape[1]
+        self.data = self.data[bw:szx-bw,2*bw:]        
+        
     def write(self,outfile,png = False,png_file=''):
         hdulist_out = self.image.hdulist
         hdulist_out[0].header['OBJECT'] = self.target+'_REDUCED'

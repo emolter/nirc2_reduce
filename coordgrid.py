@@ -701,13 +701,19 @@ class CoordGrid:
         farside = np.where(emang < 0.0)
         datsort[farside] = np.nan
         self.projected = datsort
+        self.mu_projected = emang
         
         #write data to fits file    
         hdulist_out = self.im.hdulist
+        ## projected data
         hdulist_out[0].header['OBJECT'] = self.target+'_projected'
         hdulist_out[0].data = datsort
         hdulist_out[0].writeto(outstem + '_proj.fits', overwrite=True)
-        print('Writing file %s'%outstem + '_proj.fits')
+        ## emission angles
+        hdulist_out[0].header['OBJECT'] = self.target+'_mu_proj'
+        hdulist_out[0].data = emang
+        hdulist_out[0].writeto(outstem + '_mu_proj.fits', overwrite=True)
+        print('Writing files %s'%outstem + '_proj.fits and %s'%outstem + '_mu_proj.fits')
         
     def plot_projected(self, outfname, ctrlon = 180, lat_limits = [-90, 90], lon_limits = [0, 360], cbarlabel = 'I/F'):
         '''Once projection has been run, plot it using this function'''  

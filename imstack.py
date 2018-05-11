@@ -65,11 +65,54 @@ class Stack:
     def extract_point(self, x, y):
         '''Print the I/F value and central wavelength of each filter
         for a given x,y coordinate in the image'''
-        fluxes = [self.stack[filt].centered[x,y] for filt in self.filts]
+        fluxes = [self.stack[filt].data[x,y] for filt in self.filts]
         sort = np.argsort(self.wls_eff)
         print('filter    wl_eff (um)    I/F')
         for j in sort:
             print(self.filts[j] + '    ' + str(self.wls_eff[j]) + '    ' + str(fluxes[j]))
+        
+    def extract_feature(self, frac, which = 'all'):
+        '''Find mean flux of a feature by outlining that feature with a contour
+        frac: fraction of max flux in initial box to contour as the region
+        filt: only used because need to show an image for extraction region
+        230, 20; 266, 75'''
+
+        if which == 'all':
+            which = list(self.stack.keys())
+        
+        plt.imshow(self.stack[which[0]].data, origin = 'lower left')
+        plt.show()
+        print('Define a box around the feature you want to track. Note x,y are reversed in image due to weird Python indexing!')
+        pix_l = input('Enter lower left pixel x,y separated by a comma: ')
+        pix_u = input('Enter upper right pixel x,y separated by a comma: ')
+        
+        p0x, p0y = int(pix_l.split(',')[0].strip(', \n')),int(pix_l.split(',')[1].strip(', \n'))
+        p1x, p1y = int(pix_u.split(',')[0].strip(', \n')),int(pix_u.split(',')[1].strip(', \n'))      
+        
+        def make_contour(data, frac):
+            rgn = np.copy(data)
+            rgn[rgn < frac*np.max(rgn)] = 0.0
+            rgn[rgn > 0.0] = 1.0
+            rgn[rgn < 1.0] = np.nan
+            return rgn
+        
+        print('Contour level: %f'%frac)
+        print('filter    I/F')
+        for i in range(len(sorted(which))):
+            rstr = sorted(which)[i]
+            alldata = self.stack[rstr].data
+            data = alldata[p0x:p1x,p0y:p1y]
+            if i == 0:
+                rgn = make_contour(data, frac)
+                rgn_plot = np.copy(rgn)
+                rgn_plot[np.isnan(rgn_plot)] = 0.0
+                plt.imshow(data, origin = 'lower left')
+                plt.contour(rgn_plot, [0.5], colors = 'white')
+                plt.show()
+            flux = np.nanmean(rgn * data)
+            print(rstr + '    ' + str(flux))
+        
+        
         
     def extract_ratios(self, x, y, which = 'all'):
         '''Print the filter ratios for a given x,y coordinate in the image
@@ -81,11 +124,6 @@ class Stack:
         for rstr in sorted(which):
             flux = self.ratios[rstr][x,y]
             print(rstr + '    ' + str(flux))
-        
-    def extract_region(self):
-        '''Not sure how this one will work yet.
-        depends on what type of features need to be modeled'''
-        pass
     
     
     
