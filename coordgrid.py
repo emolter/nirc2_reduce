@@ -82,7 +82,7 @@ def surface_normal(lat_g, lon_e, ob_lon):
     nx = np.cos(np.radians(lat_g))*np.cos(np.radians(lon_e-ob_lon))
     ny = np.cos(np.radians(lat_g))*np.sin(np.radians(lon_e-ob_lon))
     nz = np.sin(np.radians(lat_g))
-    return np.asarray([nz,ny,nx])
+    return np.asarray([nx,ny,nz])
 
 def emission_angle(ob_lat, surf_n):
     '''Return the cosine of the emission angle of surface wrt observer'''
