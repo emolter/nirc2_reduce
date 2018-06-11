@@ -82,12 +82,12 @@ def surface_normal(lat_g, lon_e, ob_lon):
     nx = np.cos(np.radians(lat_g))*np.cos(np.radians(lon_e-ob_lon))
     ny = np.cos(np.radians(lat_g))*np.sin(np.radians(lon_e-ob_lon))
     nz = np.sin(np.radians(lat_g))
-    return np.asarray([nx,ny,nz])
+    return np.asarray([nz,ny,nx])
 
 def emission_angle(ob_lat, surf_n):
     '''Return the cosine of the emission angle of surface wrt observer'''
     ob = np.asarray([np.cos(np.radians(ob_lat)),0,np.sin(np.radians(ob_lat))])
-    return np.dot(surf_n.T,ob)
+    return np.dot(surf_n.T, ob).T
     
 #def sun_angle(ob_lon, ob_lat, sun_lon, sun_lat):
 #    return
@@ -134,24 +134,28 @@ class CoordGrid:
         self.im = Image(infile)
         self.req = req
         self.rpol = rpol
+        scope = str.lower(scope)
 
         if scope == 'keck':
             pixscale = 0.009942
         elif scope == 'lick':
             pixscale = 0.033
+        elif scope == 'alma':
+            pixscale = np.abs(self.im.header['CDELT1']) * 3600 #deg to arcsec
         else:
             pixscale = 0.0
-        if scope == 'vla':
+        self.pixscale_arcsec = pixscale
+        if scope == 'vla' or scope == 'alma':
             self.data = self.im.data[0,0,:,:]
         else:
             self.data = self.im.data
-        self.pixscale_arcsec = pixscale
         
         #pull and reformat header info
         targ = self.im.header['OBJECT'].split('_')[0]
         targ = targ.split(' ')[0]
         self.target = targ
-        if scope == 'vla':
+        if scope == 'vla' or scope == 'alma':
+            date = self.im.header['DATE-OBS']
             expstart = date.split('T')[1]
             date = date.split('T')[0]
         elif scope == 'keck':
@@ -176,6 +180,8 @@ class CoordGrid:
             obscode = -5
         elif scope == 'lick':
             obscode = 662
+        elif scope == 'alma':
+            obscode = -7
         else:
             obscode = input('Enter Horizons observatory code: ')
         ephem = get_ephemerides(naif, obscode, tstart, tend, '1 minutes')[0][0] #just the row for start time
@@ -208,6 +214,10 @@ class CoordGrid:
             self.model_planet = np.nan_to_num(self.lat_g * 0.0 + 1.0)
             try:
                 self.projected = Image(lead_string+'_proj.fits').data
+            except:
+                pass
+            try:
+                self.mu_projected = Image(lead_string+'_mu_proj.fits').data
             except:
                 pass
         

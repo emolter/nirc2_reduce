@@ -86,6 +86,7 @@ obs.write_final(outdir+'stacked_nophot_'+filt_name+'.fits')#,png=True, png_file 
 ### 2: Multiple standard bxy3 reductions at once, e.g for Twilight Zone data
 ##################################################################################
 
+#set up 'reduced/date' directory, put flats in it
 from nirc2_reduce import multi_reduce
 filt_list = ['lp','ms','pah','kcont','h2o_ice','br_alpha','bra_cont','hcont','jcont']
 flatfilt_list = ['kp' for val in range(len(filt_list))]
