@@ -64,23 +64,23 @@ def lat_lon(x,y,ob_lon,ob_lat,pixscale_km,np_ang,req,rpol):
     y3 = x1
     r = np.sqrt(x3**2 + y3**2 + z3**2)
     
-    #lon_e = np.degrees(np.arctan(y3/x3)) + ob_lon
-    lon_e = np.degrees(np.arctan2(x3,y3)-np.pi/2) + ob_lon 
+    #lon_w = np.degrees(np.arctan(y3/x3)) + ob_lon
+    lon_w = np.degrees(np.arctan2(x3,y3)-np.pi/2) + ob_lon 
     with warnings.catch_warnings():
         warnings.simplefilter("ignore") #suppresses error for taking < nan
-        lon_e[lon_e < 0] += 360
-        lon_e = lon_e%360
+        lon_w[lon_w < 0] += 360
+        lon_w = lon_w%360
     lat_c = np.degrees(np.arcsin(z3/r))
     lat_g = np.degrees(np.arctan(r2*np.tan(np.radians(lat_c))))
-    #plt.imshow(lon_e, origin = 'lower left')
+    #plt.imshow(lon_w, origin = 'lower left')
     #plt.show()
-    return lat_g, lat_c, lon_e
+    return lat_g, lat_c, lon_w
 
-def surface_normal(lat_g, lon_e, ob_lon):
+def surface_normal(lat_g, lon_w, ob_lon):
     '''Returns the normal vector to the surface of the planet.
     Take dot product with sub-obs or sub-sun vector to find cosine of emission angle'''
-    nx = np.cos(np.radians(lat_g))*np.cos(np.radians(lon_e-ob_lon))
-    ny = np.cos(np.radians(lat_g))*np.sin(np.radians(lon_e-ob_lon))
+    nx = np.cos(np.radians(lat_g))*np.cos(np.radians(lon_w-ob_lon))
+    ny = np.cos(np.radians(lat_g))*np.sin(np.radians(lon_w-ob_lon))
     nz = np.sin(np.radians(lat_g))
     return np.asarray([nx,ny,nz])
 
@@ -142,6 +142,8 @@ class CoordGrid:
             pixscale = 0.033
         elif scope == 'alma':
             pixscale = np.abs(self.im.header['CDELT1']) * 3600 #deg to arcsec
+        elif scope == 'hst':
+            pixscale = np.abs(self.im.header['PIXSCAL'])
         else:
             pixscale = 0.0
         self.pixscale_arcsec = pixscale
@@ -158,6 +160,9 @@ class CoordGrid:
             date = self.im.header['DATE-OBS']
             expstart = date.split('T')[1]
             date = date.split('T')[0]
+        elif scope == 'hst':
+            date = self.im.header['DATE-OBS']
+            expstart = self.im.header['TIME-OBS']
         elif scope == 'keck':
             expstart = self.im.header['EXPSTART']
             date = self.im.header['DATE-OBS']
@@ -182,15 +187,25 @@ class CoordGrid:
             obscode = 662
         elif scope == 'alma':
             obscode = -7
+        elif scope == 'hst':
+            obscode = '500@-48'
         else:
             obscode = input('Enter Horizons observatory code: ')
+        
+        ## check ephem inputs
+        #print(naif)    
+        #print(obscode)
+        #print(tstart)
+        #print(tend)
+        
         ephem = get_ephemerides(naif, obscode, tstart, tend, '1 minutes')[0][0] #just the row for start time
         ephem = [val.strip(' ') for val in ephem]
         time = ephem[0]
         ra, dec = ephem[3], ephem[4]
         dra, ddec = float(ephem[5]), float(ephem[6])
-        az, el = float(ephem[7]), float(ephem[8])
-        self.airmass, extinction = float(ephem[9]), float(ephem[10])
+        if not scope == 'hst':
+            az, el = float(ephem[7]), float(ephem[8])
+            self.airmass, extinction = float(ephem[9]), float(ephem[10])
         apmag, sbrt = float(ephem[11]), float(ephem[12])
         self.ang_diam = float(ephem[15])
         self.ob_lon, self.ob_lat = float(ephem[16]), float(ephem[17])
@@ -206,16 +221,24 @@ class CoordGrid:
     
         if lead_string != None:
             #if you already did the edge detection and centering and are loading centered image
-            self.lat_g = Image(lead_string+'_latg.fits').data
-            self.lon_e = Image(lead_string+'_lone.fits').data
-            self.err_x = Image(lead_string+'_errx.fits').data
-            self.err_y = Image(lead_string+'_erry.fits').data
             self.centered = self.im.data
+            self.lat_g = Image(lead_string+'_latg.fits').data
+            self.lon_w = Image(lead_string+'_lone.fits').data
             self.model_planet = np.nan_to_num(self.lat_g * 0.0 + 1.0)
+            try:
+                self.err_x = Image(lead_string+'_errx.fits').data
+                self.err_y = Image(lead_string+'_erry.fits').data
+            except:
+                pass
             try:
                 self.projected = Image(lead_string+'_proj.fits').data
             except:
                 pass
+            try:
+                self.mu = Image(lead_string+'_mu.fits').data
+            except:
+                self.surf_n = surface_normal(self.lat_g, self.lon_w, self.ob_lon)
+                self.mu = emission_angle(self.ob_lat, self.surf_n)
             try:
                 self.mu_projected = Image(lead_string+'_mu_proj.fits').data
             except:
@@ -226,10 +249,9 @@ class CoordGrid:
             xx = np.arange(imsize_x) - xcen
             yy = np.arange(imsize_y) - ycen
             x,y = np.meshgrid(xx,yy)
-            self.lat_g, self.lat_c, self.lon_e = lat_lon(x,y,self.ob_lon,self.ob_lat,self.pixscale_km,self.np_ang,req,rpol)
-    
-        self.surf_n = surface_normal(self.lat_g, self.lon_e, self.ob_lon)
-        self.mu = emission_angle(self.ob_lat, self.surf_n)
+            self.lat_g, self.lat_c, self.lon_w = lat_lon(x,y,self.ob_lon,self.ob_lat,self.pixscale_km,self.np_ang,req,rpol)
+            self.surf_n = surface_normal(self.lat_g, self.lon_w, self.ob_lon)
+            self.mu = emission_angle(self.ob_lat, self.surf_n)
 
     def ioverf(self, filt, flux_per, stand_airmass):
         '''Compute I/F ratio given an image in cts s-1 and a conversion between
@@ -426,7 +448,7 @@ class CoordGrid:
         self.centered = shift2d(self.data,dx,dy)
         
     def plot_latlon(self):
-        '''Make pretty plot of lat_g and lon_e overlaid on planet'''
+        '''Make pretty plot of lat_g and lon_w overlaid on planet'''
         fig, (ax0, ax1) = plt.subplots(1,2, figsize = (12,6))
         
         #little circle around planet - now does not depend on self.edges existing
@@ -451,15 +473,15 @@ class CoordGrid:
         #hack here to avoid discontinuity in contours - split longs in half
         with warnings.catch_warnings():
             warnings.simplefilter("ignore") #suppresses error for taking < nan
-            lon_e1 = np.copy(self.lon_e)
-            lon_e1[lon_e1 >= 180] = np.nan
-            lon_e2 = np.copy(self.lon_e)
-            lon_e2[lon_e2 < 180] = np.nan
+            lon_w1 = np.copy(self.lon_w)
+            lon_w1[lon_w1 >= 180] = np.nan
+            lon_w2 = np.copy(self.lon_w)
+            lon_w2[lon_w2 < 180] = np.nan
         
         levels_lon = range(0,360,30)
         levels_lon_hack = [1] + list(levels_lon[1:]) #make contour at zero actually 1 - otherwise won't plot it since it's at the edge
-        ctr_lon1 = ax1.contour(lon_e1, levels_lon_hack, colors='white', linewidths=2)
-        ctr_lon2 = ax1.contour(lon_e2, levels_lon_hack, colors='white', linewidths=2)
+        ctr_lon1 = ax1.contour(lon_w1, levels_lon_hack, colors='white', linewidths=2)
+        ctr_lon2 = ax1.contour(lon_w2, levels_lon_hack, colors='white', linewidths=2)
                 
         fmt = {}
         vals = np.arange(0,360,30)
@@ -489,7 +511,7 @@ class CoordGrid:
         hdulist_out[0].writeto(lead_string + '_latg.fits', overwrite=True)
         #longitudes
         hdulist_out[0].header['OBJECT'] = self.target+'_LONGITUDES'
-        hdulist_out[0].data = self.lon_e
+        hdulist_out[0].data = self.lon_w
         hdulist_out[0].writeto(lead_string + '_lone.fits', overwrite=True)
         #errors only exist if edge_detect was run. if manual shift, just ignore
         try:
@@ -555,7 +577,7 @@ class CoordGrid:
 
         #Brightest spot in feature
         maxloc = np.where(self.centered == np.max(region))
-        maxlat, maxlon = self.lat_g[maxloc], self.lon_e[maxloc]
+        maxlat, maxlon = self.lat_g[maxloc], self.lon_w[maxloc]
         
         #Gaussian fit
         A0 = np.sum(region)
@@ -568,17 +590,17 @@ class CoordGrid:
         g = fit_g(g_init, xx, yy, region)
         
         xfg, yfg = g.x_mean + p0x, g.y_mean + p0y
-        latfg, lonfg = self.lat_g[int(round(xfg)),int(round(yfg))], self.lon_e[int(round(xfg)), int(round(yfg))]
+        latfg, lonfg = self.lat_g[int(round(xfg)),int(round(yfg))], self.lon_w[int(round(xfg)), int(round(yfg))]
         
         '''   #estimate lat and lon errors
         frac = 0.5 #can probably constrain the center much more, but depends on morphology of storm over time
         fracmax = np.where(g_overlay/np.max(g_overlay) > frac)
-        inlat, inlon = self.lat_g[fracmax], self.lon_e[fracmax]
+        inlat, inlon = self.lat_g[fracmax], self.lon_w[fracmax]
         minlat, maxlat = np.min(inlat), np.max(inlat)
         minlon, maxlon = np.min(inlon), np.max(inlon) #wrapping issues still present!
         
         lat_errl, lat_erru = np.abs(latf - minlat), np.abs(maxlat - latf) 
-        lon_errl, lon_erru = np.abs(lonf - minlon), np.abs(maxlon - lonf)'''
+        lon_wrrl, lon_wrru = np.abs(lonf - minlon), np.abs(maxlon - lonf)'''
 
         #Contour method after Martin, de Pater, Marcus 2012
         def ctr_region(rgn, frac):
@@ -592,7 +614,7 @@ class CoordGrid:
             x, y = int(round(xd)), int(round(yd))
             xcoords, ycoords = np.arange(x-3, x+4), np.arange(y-3, y+4)
             latgrid = self.lat_g[x-3:x+4,y-3:y+4]
-            longrid = self.lon_e[x-3:x+4,y-3:y+4]
+            longrid = self.lon_w[x-3:x+4,y-3:y+4]
             #RectBivariateSpline and interp2d both fail if lat/lon grid has NaNs, i.e. if near edge of planet
             if np.any(np.isnan(latgrid[2:5,2:5])):
                 #Check to see if you are way too close
@@ -611,7 +633,7 @@ class CoordGrid:
         def ctr_fit(rgn, frac):
             (px, py) = ctr_region(rgn, frac)
             xfc, yfc = px + p0x, py + p0y
-            #latfc, lonfc = self.lat_g[int(round(xfc)),int(round(yfc))], self.lon_e[int(round(xfc)), int(round(yfc))] #old way -  fails if error is <~ 1 pixel
+            #latfc, lonfc = self.lat_g[int(round(xfc)),int(round(yfc))], self.lon_w[int(round(xfc)), int(round(yfc))] #old way -  fails if error is <~ 1 pixel
             latfc, lonfc = interp_latlon_atpt(xfc, yfc)
             return xfc, yfc, latfc, lonfc
         
@@ -671,7 +693,7 @@ class CoordGrid:
         #determine the number of pixels in resampled image
         if pixsz == None:
             pixsz = self.pixscale_arcsec
-        npix_per_degree = (1/self.deg_per_px) * (pixsz / self.pixscale_arcsec) # (old pixel / degree lat) * (arcsec / old pixel) / (arcsec / new pixel) = new pixel / degree lat
+        npix_per_degree = (1/self.deg_per_px) * (self.pixscale_arcsec / pixsz) # (old pixel / degree lat) * (arcsec / old pixel) / (arcsec / new pixel) = new pixel / degree lat
         npix = int(npix_per_degree * 180) + 1 #(new pixel / degree lat) * (degree lat / planet) = new pixel / planet
         print('New image will be %d by %d pixels'%(2*npix + 1, npix))
         print('Pixel scale %f km = %f pixels per degree'%(self.pixscale_km, npix_per_degree))
@@ -680,11 +702,11 @@ class CoordGrid:
         extra_wrap_dist = 180
         newlon, newlat = np.arange(-extra_wrap_dist,360 + extra_wrap_dist, 1/npix_per_degree), np.arange(-90,90, 1/npix_per_degree)
         gridlon, gridlat = np.meshgrid(newlon, newlat)
-        nans = np.isnan(self.lon_e.flatten())
+        nans = np.isnan(self.lon_w.flatten())
         def input_helper(arr, nans):
             '''removing large region of NaNs speeds things up significantly'''
             return arr.flatten()[np.logical_not(nans)]
-        inlon, inlat, indat = input_helper(self.lon_e, nans), input_helper(self.lat_g, nans), input_helper(self.centered, nans)
+        inlon, inlat, indat = input_helper(self.lon_w, nans), input_helper(self.lat_g, nans), input_helper(self.centered, nans)
 
         #fix wrapping by adding dummy copies of small lons at > 360 lon
         inlon_near0 = inlon[inlon < extra_wrap_dist]
@@ -707,7 +729,8 @@ class CoordGrid:
         
         # make far side of planet into NaNs
         snorm = surface_normal(gridlat, gridlon, self.ob_lon)
-        emang = emission_angle(self.ob_lat, snorm).T
+        #emang = emission_angle(self.ob_lat, snorm).T
+        emang = emission_angle(self.ob_lat, snorm)
         farside = np.where(emang < 0.0)
         datsort[farside] = np.nan
         self.projected = datsort
@@ -741,24 +764,26 @@ class CoordGrid:
         newim[:,uoffsetpix:] = lefthalf #switch left and right halves
         newim[:,:uoffsetpix] = righthalf
         
-        extent = [ctrlon - 180, ctrlon + 180, -90, 90]
+        #extent = [ctrlon - 180, ctrlon + 180, -90, 90]
+        extent = [ctrlon + 180, ctrlon - 180, -90, 90]
         parallels = np.arange(lat_limits[0],lat_limits[1] + 30, 30.)
-        meridians = np.arange(lon_limits[0],lon_limits[1] + 60, 60.)
+        #meridians = np.arange(lon_limits[0],lon_limits[1] + 60, 60.)
+        meridians = np.arange(lon_limits[1], lon_limits[0] - 60, -60.)
           
         #plot it
         fs = 14 #fontsize for plots
         fig, ax0 = plt.subplots(1,1, figsize = (10,7))
         
-        cim = ax0.imshow(newim, origin = 'lower left', extent = extent, cmap = 'gray')
+        cim = ax0.imshow(np.fliplr(newim), origin = 'lower left', cmap = 'gray', extent = extent)
         for loc in parallels:
             ax0.axhline(loc, color = 'cyan', linestyle = ':')
         for loc in meridians:
             ax0.axvline(loc, color = 'cyan', linestyle = ':')
 
-        ax0.set_xlabel('Longitude', fontsize = fs)
+        ax0.set_xlabel('Longitude (W)', fontsize = fs)
         ax0.set_ylabel('Latitude', fontsize = fs)
         ax0.set_ylim(lat_limits)
-        ax0.set_xlim(lon_limits)
+        ax0.set_xlim(lon_limits[::-1])
         ax0.set_title(self.date_time, fontsize = fs + 2)
         ax0.tick_params(which = 'both', labelsize = fs - 2)
         
@@ -771,6 +796,58 @@ class CoordGrid:
         
         plt.savefig(outfname, bbox = None)
         plt.show()
+        
+    def feature_size_projected(self):
+        '''Find a feature, tell how big it is in lat-lon space'''
+        
+        if not hasattr(self, 'projected'):
+            print('Must run on projected data. Run coords.project() first. Returning')
+            return
+        
+        plt.imshow(self.projected, origin = 'lower left')
+        plt.show()
+        print('Define a box around the feature you want to track. Note x,y are reversed in image due to weird Python indexing!')
+        pix_l = input('Enter lower left pixel x,y separated by a comma: ')
+        pix_u = input('Enter upper right pixel x,y separated by a comma: ')
+        
+        p0x, p0y = int(pix_l.split(',')[0].strip(', \n')),int(pix_l.split(',')[1].strip(', \n'))
+        p1x, p1y = int(pix_u.split(',')[0].strip(', \n')),int(pix_u.split(',')[1].strip(', \n'))
+        region = self.projected[p0x:p1x,p0y:p1y]
+        
+        def build_contour(rgn, frac):
+            rgn = np.copy(rgn)
+            rgn[rgn < frac*np.max(rgn)] = 0.0
+            rgn[rgn > 0.0] = 1.0
+            return rgn
+            
+        level = 0.5
+        fwhm_2d = build_contour(region, level)
+        
+        # find the longest rays in the x and y direction across the amorphous fwhm region
+        collapse_x = np.sum(fwhm_2d, axis = 1)
+        collapse_y = np.sum(fwhm_2d, axis = 0)
+        fwhm_x, wherefwhm_x = np.max(collapse_x), np.argmax(collapse_x)
+        fwhm_y, wherefwhm_y = np.max(collapse_y), np.argmax(collapse_y)
+        
+        # convert to lat-lon
+        deg_lat, deg_lon = fwhm_x * self.deg_per_px, fwhm_y * self.deg_per_px
+        km_lat, km_lon = fwhm_x * self.pixscale_km, fwhm_y * self.pixscale_km
+        print('%f degrees lat, %f degrees lon'%(deg_lat, deg_lon))
+        print('%f km in zonal direction, %f km in meridional direction'%(km_lat, km_lon))
+        
+        # for plotting, find min point and max point for each of these rays
+        ray_x = np.where(fwhm_2d[wherefwhm_x, :] == 1)[0]
+        ray_y = np.where(fwhm_2d[:, wherefwhm_y] == 1)[0]
+        
+        plt.imshow(region, origin = 'lower left', cmap = 'gray')
+        plt.contour(fwhm_2d, levels = [level], colors = ['red'])
+        plt.plot(ray_x, np.full(ray_x.shape, wherefwhm_x), color = 'r', lw = 2)
+        plt.plot(np.full(ray_y.shape, wherefwhm_y), ray_y, color = 'r', lw = 2)
+        plt.title('%s'%self.date_time[:-6])
+        plt.savefig('storm_size.png')
+        plt.show()
+        
+        
         
     def help(self):
         
@@ -813,7 +890,7 @@ class CoordGrid:
             deg_per_px: lat/lon degrees on planet per pixel at sub obs point
             lat_g: grid of planetographic latitudes on planet
             lat_c: grid of planetocentric latitudes on planet
-            lon_e: grid of east longitudes on planet
+            lon_w: grid of west longitudes on planet (west for IAU standard, as output by Horizons)
             err_x: lat/lon error from navigation in x direction, in px
             err_y: lat/lon error from navigation in y direction, in px
             centered: centered data after edge detection

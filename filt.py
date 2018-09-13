@@ -4,6 +4,7 @@ import matplotlib.pyplot as plt
 from astropy.io import fits
 from scipy.interpolate import interp1d
 import fsps
+import pysynphot
 
 
 class Filt:
@@ -11,15 +12,31 @@ class Filt:
     def __init__(self, filt, isfsps = False):
         '''wl will be output in microns'''
         self.filtname = filt.lower()
+        #try:
         if not isfsps:
-            self.load_data()
+            try:
+                # Keck
+                self.load_data()
+            except:
+                # pysynphot
+                bp = pysynphot.ObsBandpass(self.filtname)
+                self.wl = bp.binset * 1.0e-4 #convert to micron from angstrom
+                trans = bp(bp.binset)
+                self.trans = trans/np.max(trans)
+                self.wl_eff = np.average(self.wl, weights = self.trans)
+                self.interp_f = interp1d(self.wl,self.trans, bounds_error = False, fill_value = 0.0)
+                
         else:
+            # pysynphot replaces this - really only needed so legacy code keeps working
             ftr = fsps.get_filter(self.filtname)
             wl, trans = ftr.transmission
             self.wl = wl *1.0e-4 #convert to micron from angstrom
             self.trans = trans/np.max(trans)
-            self.wl_eff = np.average(wl, weights = self.trans)
+            self.wl_eff = np.average(self.wl, weights = self.trans)
             self.interp_f = interp1d(self.wl,self.trans, bounds_error = False, fill_value = 0.0)
+        #except:
+        #    print('Could not find filter name in Keck NIRC2 filter table nor in pysynphot')
+        #    print('Check spelling, else check that data for that filter exist')
     
     def load_data(self):
         wl = []

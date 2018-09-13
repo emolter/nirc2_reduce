@@ -13,8 +13,8 @@ class Image:
         self.hdulist = fits.open(fname,ignore_missing_end=True)
         self.header = self.hdulist[0].header
         self.data = self.hdulist[0].data
-        targ = self.header['OBJECT']
         try:
+            targ = self.header['OBJECT']
             self.target = targ.split()[0].strip(', \n').capitalize()
         except:
             self.target = 'Unknown'

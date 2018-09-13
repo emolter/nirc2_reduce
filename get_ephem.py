@@ -12,7 +12,8 @@
             adapted to fit into whats_up.py
 """
 
-from urllib.request import urlopen
+from urllib.request import urlopen, urlretrieve
+import urllib
 import numpy as np
 from time import strftime, gmtime, time
 from datetime import datetime,timedelta
@@ -70,7 +71,7 @@ def get_ephemerides(code, obs_code, tstart, tend, stepsize) :
     tstart_UT = datetime.strftime(tstart_obj,"'%Y-%m-%d %H:%M'")
     tend_UT = datetime.strftime(tend_obj,"'%Y-%m-%d %H:%M'")
 
-    http = "http://ssd.jpl.nasa.gov/horizons_batch.cgi?batch=1"
+    http = "https://ssd.jpl.nasa.gov/horizons_batch.cgi?batch=1"
     make_ephem = "&MAKE_EPHEM='YES'&TABLE_TYPE='OBSERVER'"
     command    = "&COMMAND=" + str(code)
     center     = "&CENTER="+str(obs_code)  #568 is Mauna Kea
@@ -81,8 +82,11 @@ def get_ephemerides(code, obs_code, tstart, tend, stepsize) :
     csv        = "&CSV_FORMAT='YES'"
 
     url = http+make_ephem+command+center+t_start+t_stop+t_step+quantities+csv
+    url = url.replace(" ", "%20")
+    url = url.replace("'", "%27")
     try:
-        ephem = urlopen( url ).readlines()
+        with urlopen(url) as response:
+            ephem = response.readlines()  
     except:
         sys.exit('ERROR (get_ephem): Could not retrieve query from Horizons. Check Internet connection and input URL')
 

@@ -1,4 +1,4 @@
-# wl (nm)     irradiance (W m-2 nm-1)   from Gueymard 2003 (NREL)
+# wl (nm)     irradiance (W m-2 nm-1)   from Gueymard 2004 (NREL)
 0.5	2.278E-06
 1.5	1.219E-04
 2.5	1.513E-05
