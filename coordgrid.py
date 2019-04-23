@@ -153,9 +153,13 @@ class CoordGrid:
             self.data = self.im.data
         
         #pull and reformat header info
-        targ = self.im.header['OBJECT'].split('_')[0]
-        targ = targ.split(' ')[0]
-        self.target = targ
+        if not scope == 'hst_wfc3':
+            targ = self.im.header['OBJECT'].split('_')[0]
+            targ = targ.split(' ')[0]
+            self.target = targ
+        else:
+            targ = 'Neptune'
+            self.target = 'Neptune'
         if scope == 'vla' or scope == 'alma':
             date = self.im.header['DATE-OBS']
             expstart = date.split('T')[1]
@@ -187,7 +191,7 @@ class CoordGrid:
             obscode = 662
         elif scope == 'alma':
             obscode = -7
-        elif scope == 'hst':
+        elif scope == 'hst_wfc3' or scope == 'hst_opal' or scope == 'hst_wfc2':
             obscode = '500@-48'
         else:
             obscode = input('Enter Horizons observatory code: ')
@@ -203,7 +207,7 @@ class CoordGrid:
         time = ephem[0]
         ra, dec = ephem[3], ephem[4]
         dra, ddec = float(ephem[5]), float(ephem[6])
-        if not scope == 'hst':
+        if not scope == 'hst_wfc3':
             az, el = float(ephem[7]), float(ephem[8])
             self.airmass, extinction = float(ephem[9]), float(ephem[10])
         apmag, sbrt = float(ephem[11]), float(ephem[12])
@@ -218,7 +222,7 @@ class CoordGrid:
         self.pixscale_km = self.dist*np.radians(pixscale/3600)
         avg_circumference = 2*np.pi*((req + rpol)/2.0)
         self.deg_per_px = self.pixscale_km * (1/avg_circumference) * 360 #approximate conversion between degrees and pixels at sub-observer point
-    
+        
         if lead_string != None:
             #if you already did the edge detection and centering and are loading centered image
             self.centered = self.im.data
@@ -288,6 +292,7 @@ class CoordGrid:
     def edge_detect(self, low_thresh = 0.01, high_thresh = 0.05, sigma = 5, plot = True):
         '''Uses skimage canny algorithm to find edges of planet, correlates
         that with edges of model, '''
+        
         self.model_planet = np.nan_to_num(self.lat_g * 0.0 + 1.0)
         edges = feature.canny(self.data/np.max(self.data), sigma=sigma, low_threshold = low_thresh, high_threshold = high_thresh)
         model_edges = feature.canny(self.model_planet, sigma=sigma, low_threshold = low_thresh, high_threshold = high_thresh)
@@ -381,7 +386,7 @@ class CoordGrid:
                 plt.show()          
             
                 yn = input('Are you okay with these? (y/n): ')
-                if yn.lower() == 'y' or yn.lower() == 'yes':
+                if yn.lower().strip() == 'y' or yn.lower().strip() == 'yes':
                     inp = True
                 else:
                     low_thresh = float(input('New value of low_thresh: '))

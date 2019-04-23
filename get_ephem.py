@@ -53,7 +53,7 @@ def naif_lookup(target):
         return code
     return code
 
-def get_ephemerides(code, obs_code, tstart, tend, stepsize) :
+def get_ephemerides(code, obs_code, tstart, tend, stepsize, quantities = None) :
     """
     input NAIF target code, e.g. 501 for Io, and date in the format:
     'YYYY-MM-DD HH:MM'
@@ -61,6 +61,8 @@ def get_ephemerides(code, obs_code, tstart, tend, stepsize) :
     Returns a list containing (in string format):
     UTdate and time,sun,moon,RA (J2000),DEC (J2000),dra,ddec,azimuth,elevation,Airmass,Extinction,APmag,s-brt,Ang-Diam("),ang-sep("),visibility,Ob-lon,Ob-lat,NP.ang,NP.dist
     """
+    if quantities == None:
+        quantities = '1,3,4,8,9,12,13,14,15,17,19,20'
 
     tstart_obj = datetime.strptime(tstart,'%Y-%m-%d %H:%M')
     tend_obj = datetime.strptime(tend,'%Y-%m-%d %H:%M')
@@ -74,11 +76,11 @@ def get_ephemerides(code, obs_code, tstart, tend, stepsize) :
     http = "https://ssd.jpl.nasa.gov/horizons_batch.cgi?batch=1"
     make_ephem = "&MAKE_EPHEM='YES'&TABLE_TYPE='OBSERVER'"
     command    = "&COMMAND=" + str(code)
-    center     = "&CENTER="+str(obs_code)  #568 is Mauna Kea
+    center     = "&CENTER="+str(obs_code)  #568 is Mauna Kea, 662 is Lick, etc
     t_start    = "&START_TIME=" + tstart_UT
     t_stop     = "&STOP_TIME=" + tend_UT
     t_step     = "&STEP_SIZE='" + stepsize + "'"
-    quantities = "&QUANTITIES='1,3,4,8,9,12,13,14,15,17,19,20'"
+    quantities = "&QUANTITIES='%s'"%quantities
     csv        = "&CSV_FORMAT='YES'"
 
     url = http+make_ephem+command+center+t_start+t_stop+t_step+quantities+csv
