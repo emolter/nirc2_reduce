@@ -227,7 +227,7 @@ class CoordGrid:
             #if you already did the edge detection and centering and are loading centered image
             self.centered = self.im.data
             self.lat_g = Image(lead_string+'_latg.fits').data
-            self.lon_w = Image(lead_string+'_lone.fits').data
+            self.lon_w = Image(lead_string+'_lonw.fits').data
             self.model_planet = np.nan_to_num(self.lat_g * 0.0 + 1.0)
             try:
                 self.err_x = Image(lead_string+'_errx.fits').data
@@ -517,7 +517,7 @@ class CoordGrid:
         #longitudes
         hdulist_out[0].header['OBJECT'] = self.target+'_LONGITUDES'
         hdulist_out[0].data = self.lon_w
-        hdulist_out[0].writeto(lead_string + '_lone.fits', overwrite=True)
+        hdulist_out[0].writeto(lead_string + '_lonw.fits', overwrite=True)
         #errors only exist if edge_detect was run. if manual shift, just ignore
         try:
             #error in x*mu
