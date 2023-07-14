@@ -14,13 +14,10 @@ from skimage import feature
 from image_registration.chi2_shifts import chi2_shift
 from image_registration.fft_tools.shift import shiftnd, shift2d
 from scipy.interpolate import interp2d, RectBivariateSpline, NearestNDInterpolator, griddata
-#from .fit_gaussian import fitgaussian
 from astropy.modeling import models, fitting
+from scipy import ndimage
 from scipy.ndimage.measurements import center_of_mass
 from scipy.ndimage.interpolation import zoom
-
-#from mpl_toolkits import basemap
-import pyproj
 
 
 def lat_lon(x,y,ob_lon,ob_lat,pixscale_km,np_ang,req,rpol):
@@ -72,9 +69,10 @@ def lat_lon(x,y,ob_lon,ob_lat,pixscale_km,np_ang,req,rpol):
         lon_w = lon_w%360
     lat_c = np.degrees(np.arcsin(z3/r))
     lat_g = np.degrees(np.arctan(r2*np.tan(np.radians(lat_c))))
-    #plt.imshow(lon_w, origin = 'lower left')
+    #plt.imshow(lon_w, origin = 'lower')
     #plt.show()
     return lat_g, lat_c, lon_w
+
 
 def surface_normal(lat_g, lon_w, ob_lon):
     '''Returns the normal vector to the surface of the planet.
@@ -84,13 +82,12 @@ def surface_normal(lat_g, lon_w, ob_lon):
     nz = np.sin(np.radians(lat_g))
     return np.asarray([nx,ny,nz])
 
+
 def emission_angle(ob_lat, surf_n):
     '''Return the cosine of the emission angle of surface wrt observer'''
     ob = np.asarray([np.cos(np.radians(ob_lat)),0,np.sin(np.radians(ob_lat))])
     return np.dot(surf_n.T, ob).T
-    
-#def sun_angle(ob_lon, ob_lat, sun_lon, sun_lat):
-#    return
+  
     
 def get_filt_info(filt):
     '''Helper to I/F. Will find flux of sun in given filter'''
@@ -103,11 +100,13 @@ def get_filt_info(filt):
                 wl = float(l[1].strip(', \n'))
                 sun_mag = float(l[2].strip(', \n'))
                 return wl, sun_mag
+
                 
 def find_airmass(observatory, time, object):
     '''Use the power of astropy to retrieve airmass of standard
     star automatically... obvs not done yet'''
     return
+   
                 
 def airmass_correction(air_t, air_c, filt):
     '''Helper to I/F. Computes correction factor to photometry based on airmass.
@@ -125,6 +124,7 @@ def airmass_correction(air_t, air_c, filt):
     tau = cdict[filt]
     factor = np.exp(tau*air_t)/np.exp(tau*air_c)
     return factor
+    
 
 class CoordGrid:
     
@@ -144,6 +144,8 @@ class CoordGrid:
             pixscale = np.abs(self.im.header['CDELT1']) * 3600 #deg to arcsec
         elif scope == 'hst':
             pixscale = np.abs(self.im.header['PIXSCAL'])
+        elif scope == 'jwst':
+            pixscale = 0.066 # NIRISS
         else:
             pixscale = 0.0
         self.pixscale_arcsec = pixscale
@@ -153,13 +155,10 @@ class CoordGrid:
             self.data = self.im.data
         
         #pull and reformat header info
-        if not scope == 'hst_wfc3':
-            targ = self.im.header['OBJECT'].split('_')[0]
-            targ = targ.split(' ')[0]
-            self.target = targ
-        else:
-            targ = 'Neptune'
-            self.target = 'Neptune'
+        targ = self.im.header['OBJECT'].split('_')[0]
+        targ = targ.split(' ')[0]
+        self.target = targ
+        
         if scope == 'vla' or scope == 'alma':
             date = self.im.header['DATE-OBS']
             expstart = date.split('T')[1]
@@ -170,6 +169,8 @@ class CoordGrid:
         elif scope == 'keck':
             expstart = self.im.header['EXPSTART']
             date = self.im.header['DATE-OBS']
+        elif scope == 'jwst':
+            pass
         imsize_x = self.data.shape[0]
         imsize_y = self.data.shape[1]
         if scope == 'lick':
@@ -191,8 +192,10 @@ class CoordGrid:
             obscode = 662
         elif scope == 'alma':
             obscode = -7
-        elif scope == 'hst_wfc3' or scope == 'hst_opal' or scope == 'hst_wfc2':
+        elif scope == 'hst':
             obscode = '500@-48'
+        elif scope == 'jwst':
+            obscode = '500@-170'
         else:
             obscode = input('Enter Horizons observatory code: ')
         
@@ -207,9 +210,8 @@ class CoordGrid:
         time = ephem[0]
         ra, dec = ephem[3], ephem[4]
         dra, ddec = float(ephem[5]), float(ephem[6])
-        if not scope == 'hst_wfc3':
-            az, el = float(ephem[7]), float(ephem[8])
-            self.airmass, extinction = float(ephem[9]), float(ephem[10])
+        az, el = float(ephem[7]), float(ephem[8])
+        self.airmass, extinction = float(ephem[9]), float(ephem[10])
         apmag, sbrt = float(ephem[11]), float(ephem[12])
         self.ang_diam = float(ephem[15])
         self.ob_lon, self.ob_lat = float(ephem[16]), float(ephem[17])
@@ -289,15 +291,42 @@ class CoordGrid:
         hdulist_out[0].data = self.data
         hdulist_out[0].writeto(outstr, overwrite=True)
 
-    def edge_detect(self, low_thresh = 0.01, high_thresh = 0.05, sigma = 5, plot = True):
+    def edge_detect(self, mode = 'canny', low_thresh = 0.01, high_thresh = 0.05, sigma = 5, plot = True, diffraction_limit = 0.030, ldparam = 0.0):
         '''Uses skimage canny algorithm to find edges of planet, correlates
-        that with edges of model, '''
+        that with edges of model, centers model on planet
+        
+        inputs
+        ------
+        mode: 'canny' for edge detection, 'lddisk' for convolve with limb darkened disk 
+            smoothed by beam at diffraction_limit
+        diffraction_limit: arcsec. 1.22lambda/D for telescope/wavelength of interest, i.e. distance to first Airy ring null. required for mode='lddisk'
+        ldparam: how much limb darkening is requested. exponential model. required for mode='lddisk'
+        '''
         
         self.model_planet = np.nan_to_num(self.lat_g * 0.0 + 1.0)
-        edges = feature.canny(self.data/np.max(self.data), sigma=sigma, low_threshold = low_thresh, high_threshold = high_thresh)
-        model_edges = feature.canny(self.model_planet, sigma=sigma, low_threshold = low_thresh, high_threshold = high_thresh)
-    
-        [dx,dy,dxerr,dyerr] = chi2_shift(model_edges,edges)
+        if mode == 'canny':
+            edges = feature.canny(self.data/np.max(self.data), sigma=sigma, low_threshold = low_thresh, high_threshold = high_thresh)
+            model = feature.canny(self.model_planet, sigma=sigma, low_threshold = low_thresh, high_threshold = high_thresh)
+            [dx,dy,dxerr,dyerr] = chi2_shift(model,edges)
+            model_shifted = shift2d(edges,-1*dx,-1*dy)
+            
+        elif mode == 'lddisk' or mode == 'disk':
+            
+            def limbdark_exp(mu, a):
+                bad = np.isnan(mu)
+                mu[bad] = 0.0
+                ld = mu**a
+                ld[bad] = 0.0
+                return ld
+            
+            ldmodel = limbdark_exp(self.mu, ldparam)
+            model = ndimage.gaussian_filter(ldmodel, 0.34493 * diffraction_limit) # Gaussian approximation to Airy ring has this sigma
+            [dx,dy,dxerr,dyerr] = chi2_shift(model, self.data/np.max(self.data))
+            model_shifted = shift2d(model,dx,dy)
+            
+        else:
+            raise ValueError("invalid parameter mode; must be 'lddisk' or 'canny'")
+            
         self.x_shift = -dx #need if we want to shift another filter the same amount
         self.y_shift = -dy
         print('Pixel shift X, Y = ', self.x_shift, self.y_shift)
@@ -310,19 +339,22 @@ class CoordGrid:
         print('    Lat/Lon error at sub-obs point in y-hat direction = '+str(dyerr/self.deg_per_px))   
         
         self.centered = shift2d(self.data,-1*dx,-1*dy)
-        self.edges = shift2d(edges,-1*dx,-1*dy)
+        
 
         if plot:
             fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(10, 5))
             
-            ax0.imshow(self.data, origin = 'lower left')
+            ax0.imshow(self.data, origin = 'lower')
             ax0.set_title('Image')
             
-            ax1.imshow(edges, origin = 'lower left')
-            ax1.set_title('Canny filter, $\sigma=$%d'%sigma)
+            ax1.imshow(model, origin = 'lower')
+            if mode == 'canny':
+                ax1.set_title(r'Canny filter, $\sigma=$%d'%sigma)
+            elif mode == 'lddisk' or mode == 'disk':
+                ax1.set_title(r'Limb-darkened disk model, $a=$%d'%ldparam)
             
-            ax2.imshow(self.edges, origin = 'lower left', alpha = 0.5)
-            ax2.imshow(model_edges, origin = 'lower left', alpha = 0.5)
+            ax2.imshow(model_shifted, origin = 'lower', alpha = 0.5)
+            ax2.imshow(self.data, origin = 'lower', alpha = 0.5)
             ax2.set_title('Overlay model and data')
             
             plt.show()
@@ -363,10 +395,10 @@ class CoordGrid:
                     
                     #plot things
                     axarr = axes[i]
-                    axarr[0].imshow(self.data, origin = 'lower left')
-                    axarr[1].imshow(edges, origin = 'lower left')
-                    axarr[2].imshow(shift_edges, origin = 'lower left', alpha = 0.5)
-                    axarr[2].imshow(model_edges, origin = 'lower left', alpha = 0.5) 
+                    axarr[0].imshow(self.data, origin = 'lower')
+                    axarr[1].imshow(edges, origin = 'lower')
+                    axarr[2].imshow(shift_edges, origin = 'lower', alpha = 0.5)
+                    axarr[2].imshow(model_edges, origin = 'lower', alpha = 0.5) 
                     
                     #cosmetics
                     if i == 0:
@@ -414,14 +446,14 @@ class CoordGrid:
                 if plotevery:
                     fig, (ax0, ax1, ax2) = plt.subplots(1, 3, figsize=(10, 5))
                     
-                    ax0.imshow(self.data, origin = 'lower left')
+                    ax0.imshow(self.data, origin = 'lower')
                     ax0.set_title('Image')
                     
-                    ax1.imshow(edges, origin = 'lower left')
+                    ax1.imshow(edges, origin = 'lower')
                     ax1.set_title('Canny filter, $\sigma=$%d'%sigma)
                     
-                    ax2.imshow(shift2d(edges,-1*dx,-1*dy), origin = 'lower left', alpha = 0.5)
-                    ax2.imshow(model_edges, origin = 'lower left', alpha = 0.5)
+                    ax2.imshow(shift2d(edges,-1*dx,-1*dy), origin = 'lower', alpha = 0.5)
+                    ax2.imshow(model_edges, origin = 'lower', alpha = 0.5)
                     ax2.set_title('Overlay model and data') 
                     
                     plt.show()                   
@@ -452,7 +484,7 @@ class CoordGrid:
     def manual_shift(self,dx,dy):
         self.centered = shift2d(self.data,dx,dy)
         
-    def plot_latlon(self):
+    def plot_latlon(self, outfile = None):
         '''Make pretty plot of lat_g and lon_w overlaid on planet'''
         fig, (ax0, ax1) = plt.subplots(1,2, figsize = (12,6))
         
@@ -463,7 +495,7 @@ class CoordGrid:
         planetedge[nans] = 0
         
         #latitudes
-        ax0.imshow(self.centered, origin = 'lower left')
+        ax0.imshow(self.centered, origin = 'lower')
         levels_lat = np.arange(-90,105,15)
         label_levels_lat = np.arange(-90,60,30)
         ctr_lat = ax0.contour(self.lat_g, levels_lat, colors='white', linewidths=2)
@@ -474,7 +506,7 @@ class CoordGrid:
         ax0.axes.get_yaxis().set_ticks([])
         
         #longitudes
-        ax1.imshow(self.centered, origin = 'lower left')
+        ax1.imshow(self.centered, origin = 'lower')
         #hack here to avoid discontinuity in contours - split longs in half
         with warnings.catch_warnings():
             warnings.simplefilter("ignore") #suppresses error for taking < nan
@@ -500,7 +532,8 @@ class CoordGrid:
         ax1.axes.get_yaxis().set_ticks([])        
                 
         plt.tight_layout()
-        plt.savefig('lat_lon_overlay.png')
+        if outfile is not None:
+            plt.savefig(outfile)
         plt.show()
         
     def write(self, lead_string):
@@ -570,7 +603,7 @@ class CoordGrid:
         return z
         
     def locate_feature(self, outfile=None):
-        plt.imshow(self.centered, origin = 'lower left')
+        plt.imshow(self.centered, origin = 'lower')
         plt.show()
         print('Define a box around the feature you want to track. Note x,y are reversed in image due to weird Python indexing!')
         pix_l = input('Enter lower left pixel x,y separated by a comma: ')
@@ -682,7 +715,7 @@ class CoordGrid:
         g_overlay[p0x:p1x,p0y:p1y] = eval_g
         #plot things up                                     
         fig, (ax0) = plt.subplots(1,1, figsize = (8,5))
-        ax0.imshow(region, origin = 'lower left')
+        ax0.imshow(region, origin = 'lower')
         levels = [0.68, 0.815, 0.95]
         cs = ax0.contour(region/np.max(region), levels, colors = 'white')
         cs_g = ax0.contour(eval_g/np.max(eval_g), [0.68], colors = 'red')
@@ -753,7 +786,7 @@ class CoordGrid:
         hdulist_out[0].writeto(outstem + '_mu_proj.fits', overwrite=True)
         print('Writing files %s'%outstem + '_proj.fits and %s'%outstem + '_mu_proj.fits')
         
-    def plot_projected(self, outfname, ctrlon = 180, lat_limits = [-90, 90], lon_limits = [0, 360], cbarlabel = 'I/F'):
+    def plot_projected(self, outfile=None, ctrlon = 180, lat_limits = [-90, 90], lon_limits = [0, 360], cbarlabel = 'I/F'):
         '''Once projection has been run, plot it using this function'''  
         
         #apply center longitude to everything
@@ -761,8 +794,8 @@ class CoordGrid:
         npix_per_degree = 1.0 / self.deg_per_px
         print(npix_per_degree)
         offset = (ctrlon + 180)%360
-        offsetpix = np.round(offset*npix_per_degree)
-        uoffsetpix = npix - offsetpix
+        offsetpix = int(np.round(offset*npix_per_degree))
+        uoffsetpix = int(npix - offsetpix)
         newim = np.copy(self.projected)
         lefthalf = self.projected[:,:offsetpix]
         righthalf = self.projected[:,offsetpix:]
@@ -779,7 +812,7 @@ class CoordGrid:
         fs = 14 #fontsize for plots
         fig, ax0 = plt.subplots(1,1, figsize = (10,7))
         
-        cim = ax0.imshow(np.fliplr(newim), origin = 'lower left', cmap = 'gray', extent = extent)
+        cim = ax0.imshow(np.fliplr(newim), origin = 'lower', cmap = 'gray', extent = extent)
         for loc in parallels:
             ax0.axhline(loc, color = 'cyan', linestyle = ':')
         for loc in meridians:
@@ -799,7 +832,8 @@ class CoordGrid:
         cbar.set_label(cbarlabel, fontsize = fs)
         cax.tick_params(which = 'both', labelsize = fs - 2)
         
-        plt.savefig(outfname, bbox = None)
+        if outfile is not None:
+            plt.savefig(outfile, bbox = None)
         plt.show()
         
     def feature_size_projected(self):
@@ -809,7 +843,7 @@ class CoordGrid:
             print('Must run on projected data. Run coords.project() first. Returning')
             return
         
-        plt.imshow(self.projected, origin = 'lower left')
+        plt.imshow(self.projected, origin = 'lower')
         plt.show()
         print('Define a box around the feature you want to track. Note x,y are reversed in image due to weird Python indexing!')
         pix_l = input('Enter lower left pixel x,y separated by a comma: ')
@@ -844,7 +878,7 @@ class CoordGrid:
         ray_x = np.where(fwhm_2d[wherefwhm_x, :] == 1)[0]
         ray_y = np.where(fwhm_2d[:, wherefwhm_y] == 1)[0]
         
-        plt.imshow(region, origin = 'lower left', cmap = 'gray')
+        plt.imshow(region, origin = 'lower', cmap = 'gray')
         plt.contour(fwhm_2d, levels = [level], colors = ['red'])
         plt.plot(ray_x, np.full(ray_x.shape, wherefwhm_x), color = 'r', lw = 2)
         plt.plot(np.full(ray_y.shape, wherefwhm_y), ray_y, color = 'r', lw = 2)

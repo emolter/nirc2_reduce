@@ -25,6 +25,15 @@ Workflows in this document:
 10. Extracting information from a stack of images taken in different filters
 11. Extracting full-sized individual reduced frames with photometry, e.g. for moon photometry
 999. Miscellaneous coordGrid tasks
+
+
+NOTES FROM ERIN:
+dependencies: anaconda, image_registration, astroscrappy (need pip install), pyproj (REMOVED)
+
+tutorial on setup is needed! -- include that if multiple planets, need to re-make reduced/date directory
+
+hardcoded path to service et al. warp solutions - make relative path - problem in bxy3 and nod
+hardcoded path to naif IDs in get_ephem
 '''
 
 ##################################################################################
@@ -32,16 +41,19 @@ Workflows in this document:
 ##################################################################################
 
 # setup
+# remember, bxy3 assumes top left, bottom right, top right in that order
 from nirc2_reduce import sort_rawfiles, bxy3, flats
 import matplotlib.pyplot as plt
 date = '2017sep27'
+input_dir = 'raw/'+date+'/'
 outdir = 'reduced/'+date+'/'
 filt_name = 'h'
 flat_filt = 'h'
 target_name = 'Neptune'
 
 # make flats and badpx map
-domeflatoff, domeflaton = sort_rawfiles.get_flats(filt_name, date)
+domeflatoff, domeflaton = sort_rawfiles.get_flats(input_dir, filt_name)
+# domeflatoff, domeflaton are lists of filenames
 flat = flats.Flats(domeflatoff, domeflaton)
 flat.write(outdir+'flat_master_'+filt_name+'.fits')
 tol = 0.07 #how far from median value can a pixel be before it's bad?
@@ -56,9 +68,9 @@ flat.plot()
 # if no flats were taken, get from a nearby date and just modify apply_badpx_map and apply_flat
 
 # bxy3
-filenames_all = sort_rawfiles.find_object(target_name,date)
+filenames_all = sort_rawfiles.find_object(input_dir, target_name)
 fnames = sort_rawfiles.find_filter(filenames_all, filt_name)
-print(fnames)
+fnames = np.sort(fnames)
 #ensure these files are a bxy3 before continuing
 obs = bxy3.Bxy3(fnames)
 obs.make_sky(outdir+'sky_'+filt_name+'.fits')
@@ -212,7 +224,7 @@ multi_reduce.multiApplyPhot(date, airmass)
 
 # start in directory containing calibrated images
 from nirc2_reduce import coordgrid
-coords = coordgrid.CoordGrid('h_calibrated.fits')
+coords = coordgrid.CoordGrid('h_calibrated.fits', req = 10000, rpol = 9000, scope = 'keck')
 coords.edge_detect(low_thresh = 0.01, high_thresh = 0.05, sigma = 5)
 #for kp, coords.edge_detect(low_thresh = 0.0001, high_thresh = 0.001, sigma = 5) seemed to work
 
@@ -262,7 +274,7 @@ from nirc2_reduce import coordgrid
 coords = coordgrid.CoordGrid('h_centered.fits', lead_string = 'h')
 # to project onto flat
 coords.project(outstem = 'h') #, pixsz = 0.009942)
-coords.plot_projected(outstem = 'h', ctrlon = 180, lat_limits = [-60, 60], lon_limits = [0, 360])
+coords.plot_projected('h_proj.png', ctrlon = 180, lat_limits = [-60, 60], lon_limits = [0, 360])
 
 # running project() saves it to file automatically
 # use coords.projected to access it within the class

@@ -12,12 +12,20 @@ class Nod:
     
     def __init__(self, skyf, imagef):
         '''Input two file names, a science image and a sky.'''
+        if type(skyf) != str and type(skyf) != np.str_:
+            if len(skyf) == 1:
+                skyf = skyf[0]
+            else:
+                print('ERROR: passed 2 or more sky files into nod.py')
+        if type(imagef) != str and type(imagef) != np.str_:
+            if len(imagef) == 1:
+                imagef = imagef[0]
+            else:
+                print('ERROR: passed 2 or more image files into nod.py')
+            
         self.image = Image(imagef)
         self.data = self.image.data
-        if type(skyf) != str:
-            self.sky = np.zeros(self.data.shape)
-        else:
-            self.sky = Image(skyf).data
+        self.sky = Image(skyf).data
         self.subc = self.image.hdulist[0].header['NAXIS1']
         if self.subc == 256:
             self.data = self.data[4:-4,:]
@@ -72,8 +80,8 @@ class Nod:
         Spline interpolation used to interpolate original image. The spline
         is then evaluated at new pixel locations computed from the map.
         '''
-        warpx = fits.getdata('/Users/emolter/Python/nirc2_reduce/nirc2_distort_X_post20150413_v1.fits')
-        warpy = fits.getdata('/Users/emolter/Python/nirc2_reduce/nirc2_distort_Y_post20150413_v1.fits')
+        warpx = fits.getdata('/Users/emolter/ned_laptop/Python/nirc2_reduce/nirc2_distort_X_post20150413_v1.fits')
+        warpy = fits.getdata('/Users/emolter/ned_laptop/Python/nirc2_reduce/nirc2_distort_Y_post20150413_v1.fits')
         #handle subarrays
         if self.subc != 1024: #hardcode because dewarp arrays will always be full size of detector
             ctr = 512

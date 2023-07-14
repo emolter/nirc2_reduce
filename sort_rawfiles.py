@@ -10,12 +10,12 @@ from astropy.io import fits
 warnings.filterwarnings('ignore','The following header keyword is invalid or follows an unrecognized non-standard convention')
 warnings.filterwarnings('ignore','non-ASCII characters are present in the FITS file header and have been replaced')
 
-def find_object(obj_name,date):
+def find_object(input_dir,obj_name):
     '''Run this one first - it searches directory for given date to find
     images of a given target, e.g. domeflatoff or neptune'''
     cwd = os.getcwd()
-    fnames = os.listdir(cwd+'/raw/'+date)
-    fnames = np.asarray([cwd+'/raw/'+date+'/'+name for name in fnames])
+    fnames = os.listdir(cwd+'/'+input_dir)
+    fnames = np.asarray([cwd+'/'+input_dir+name for name in fnames])
     good = np.asarray([s.endswith('.fits') for s in fnames])
     fnames = fnames[good]
     obj = np.asarray([fits.getheader(f, 0, ignore_missing_end=True)['OBJECT'].split(' ')[0].lower() for f in fnames])
@@ -34,10 +34,10 @@ def find_filter(fnames, filt_name):
         return fnames_i
     return fnames_o
 
-def get_flats(filt_name, date):
+def get_flats(input_dir, filt_name, offname = 'domeflatoff', onname='domeflaton'):
     '''return domeflatoff, domeflaton filenames for filter'''
-    flatoff = find_filter(find_object('domeflatoff',date),filt_name)
-    flaton = find_filter(find_object('domeflaton',date),filt_name)
+    flatoff = find_filter(find_object(input_dir, offname),filt_name)
+    flaton = find_filter(find_object(input_dir, onname),filt_name)
     return flatoff, flaton
     
 #print(fits.getheader('raw/2017jul25/n0001.fits', 0, ignore_missing_end=True)['OBJECT'])

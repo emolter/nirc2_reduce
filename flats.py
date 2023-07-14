@@ -29,7 +29,7 @@ class Flats:
         hdulist_out[0].writeto(outfile, overwrite=True)
         
     def plot(self):
-        plt.imshow(self.flat, origin = 'lower left')
+        plt.imshow(self.flat, origin = 'lower')
         plt.show()
     
     def make_badpx_map(self, outfile, tol, blocksize):
