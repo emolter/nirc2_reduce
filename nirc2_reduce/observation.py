@@ -8,6 +8,7 @@ from scipy.interpolate import RectBivariateSpline
 import astroscrappy
 from image_registration.chi2_shifts import chi2_shift
 from image_registration.fft_tools.shift import shiftnd, shift2d
+import importlib
 
 
 def crop_center(frame, subc):
@@ -57,13 +58,14 @@ class Observation:
         target : str. the object you observed, scrubbed from the header.
         '''
         if type(fnames) == str:
-            fnames = [fnames,]
+            fnames = [fnames,] # needed to make pass through all the for loops
+            
         self.dummy_fits = Image(fnames[0]) #used to hijack header info
         self.frames = np.asarray([Image(f).data for f in fnames])
         self.subc = self.dummy_fits.hdulist[0].header[subc_kw]
         self.target = self.dummy_fits.hdulist[0].header[obj_kw]   
         
-        if self.frames[0].shape[0] != self.subc or self.frames[1].shape[1] != self.subc:
+        if self.frames[0].shape[0] != self.subc or self.frames[0].shape[1] != self.subc:
             #subarrays smaller than 512x512 on Keck are not square. chop out center
             frames_square = []
             for frame in self.frames:
@@ -87,6 +89,7 @@ class Observation:
         if flat.shape[0] != self.subc:
             flat = crop_center(flat, self.subc)
         
+        frames_flat = []
         for frame in self.frames:
             with np.errstate(divide='ignore',invalid='ignore'):
                 frames_flat.append(frame/flat)
@@ -275,6 +278,57 @@ class Observation:
         '''
         szx,szy = self.final.shape[0],self.final.shape[1]
         self.final = self.final[bw:szx-bw,bw:szy-bw]
+        
+        
+    def plot_frames(self, png_file=None):
+        '''
+        Description
+        -----------
+        Plot the individual frames any step in the process
+        
+        Parameters
+        ----------
+        png_file : str or None, optional. Default None.
+            filename to which image is saved
+            if None, image not saved
+        '''
+        n = len(self.frames)
+        fig, axes = plt.subplots(1,n, figsize = (3*n,4))
+        for i in range(len(axes)):
+            plotframe = self.frames[i]
+            vmax = np.nanmax(medfilt(plotframe, kernel_size = 7))
+            ax = axes[i]
+            ax.imshow(plotframe, origin = 'lower', vmin=0, vmax=vmax)
+            ax.set_title('Frame %d'%i)
+            ax.set_xticks([])
+            ax.set_yticks([])
+        if png_file is not None:
+            fig.savefig(png_file, dpi=300)
+        plt.show()
+        
+        
+    def plot_final(self, show=True, png_file=None):
+        '''
+        Parameters
+        ----------
+        show : bool, optional, default True. show plot?
+        png_file : str or None, optional. Default None.
+            filename to which image is saved
+            if None, image not saved
+        '''
+        fig, ax = plt.subplots(1,1, figsize=(8,8))
+        try:
+            cmap = get_colormap(self.target)
+        except:
+            print('No custom colormap defined for target, setting to default')
+            cmap = cm.viridis
+        ax.imshow(self.final, cmap = cmap, origin='lower')
+        plt.tight_layout()
+        if png_file is not None:
+            fig.savefig(png_file,bbox='None', dpi=300)
+        if show:
+            plt.show()
+        plt.close()
     
         
     def write_frames(self,outfiles):
@@ -295,7 +349,7 @@ class Observation:
             hdulist_out[0].writeto(outfile, overwrite=True) 
     
         
-    def write_final(self,outfile,png_file=None):
+    def write_final(self,outfile):
         '''
         Description
         -----------
@@ -312,17 +366,6 @@ class Observation:
         hdulist_out[0].header['OBJECT'] = self.target+'_STACKED'
         hdulist_out[0].data = self.final
         hdulist_out[0].writeto(outfile, overwrite=True)
-        if png_file is not None:
-            fig, ax = plt.subplots(1,1, figsize=(8,8))
-            try:
-                cmap = get_colormap(self.target)
-            except:
-                print('No custom colormap defined for target, setting to default')
-                cmap = cm.hot
-            ax.imshow(self.final, cmap = cmap, origin='lower')
-            plt.tight_layout()
-            fig.savefig(png_file,bbox='None', dpi=300)
-            plt.close()
     
     
 class Nod(Observation):
@@ -375,7 +418,7 @@ class Nod(Observation):
         bw : width of the crop
         '''
         szx,szy = self.frames[0].shape[0],self.frames[0].shape[1]
-        self.frames = np.array([data[bw:szx-bw,2*bw:] for data in frames])
+        self.frames = np.array([data[bw:szx-bw,2*bw:] for data in self.frames])
         
            
 class Bxy3(Observation):
@@ -510,27 +553,3 @@ class Bxy3(Observation):
         ftrim1 = self.frames[1][box1[0]:box1[1],box1[2]:box1[3]]
         ftrim2 = self.frames[2][box2[0]:box2[1],box2[2]:box2[3]]
         self.frames = np.asarray([ftrim0,ftrim1,ftrim2])
-
-
-    def plot_frames(self, png_file=None):
-        '''
-        Description
-        -----------
-        Plot the individual frames any step in the process
-        
-        Parameters
-        ----------
-        png_file : str or None, optional. Default None.
-            filename to which image is saved
-            if None, image not saved
-        '''
-        fig, axes = plt.subplots(1,3, figsize = (9,5))
-        for i in range(len(axes)):
-            ax = axes[i]
-            ax.imshow(self.frames[i], origin = 'lower')
-            ax.set_title('Frame %d'%i)
-            ax.set_xticks([])
-            ax.set_yticks([])
-        if png_file is not None:
-            fig.savefig(png_file, dpi=300)
-        plt.show()
