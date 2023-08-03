@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.io import fits
@@ -206,7 +205,8 @@ def convert_filters(f1, f2):
     print(v2)
     return v2/v1
     
-'''We need a way to convert between filters.
+'''
+We need a way to convert between filters.
 Say we have a standard star flux in 2MASS k band, but we want its flux
 in NIRC2 kp band. How do we go between those? Can we just assume our
 standard star has the same relative flux in those filters as Vega?
@@ -215,10 +215,11 @@ for those, then compare to the NIRC2 filter Vega mags I compute to get a
 conversion factor.
 '''
 
-#sun = Spectrum('filter_passbands/sun_spectrum.txt', 'sun')
-#sun.plot()
-#make_sun_table()        
-#make_vega_table()   
-#print(find_sun_narrow(1.2903))
-#print(convert_filters('2mass_ks', 'h2o_ice'))
-#print(convert_filters('bessell_m', 'ms'))
+if __name__ == "__main__":
+    sun = Spectrum('filter_passbands/sun_spectrum.txt', 'sun')
+    sun.plot()
+    make_sun_table()        
+    make_vega_table()   
+    print(find_sun_narrow(1.2903))
+    print(convert_filters('2mass_ks', 'h2o_ice'))
+    print(convert_filters('bessell_m', 'ms'))

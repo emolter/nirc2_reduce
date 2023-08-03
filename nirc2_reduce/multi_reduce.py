@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-from . import sort_rawfiles, bxy3, phot, flats, image, coordgrid, nod
+from . import sort_rawfiles, observation, phot, flats, image, coordgrid
 import matplotlib.pyplot as plt
 import numpy as np
 
@@ -24,7 +24,7 @@ def multiBxy3(date, target_name, filt_list, flatfilt_list):
         else:
             try:
                 #do full data reduction for that filter
-                obs = bxy3.Bxy3(fnames)
+                obs = observation.Bxy3(fnames)
                 obs.make_sky(outdir+'sky_'+filt_name+'.fits')
                 obs.apply_sky(outdir+'sky_'+filt_name+'.fits')
                 if flat_filt != None:
@@ -36,7 +36,7 @@ def multiBxy3(date, target_name, filt_list, flatfilt_list):
                 obs.per_second()
                 obs.write_frames([outdir+'frame0_nophot_'+filt_name+'.fits',outdir+'frame1_nophot_'+filt_name+'.fits',outdir+'frame2_nophot_'+filt_name+'.fits'])
                 obs.stack()
-                obs.crop(50)
+                obs.crop_final(50)
                 obs.write_final(outdir+'stacked_nophot_'+filt_name+'.fits')
                 print('Finished filter %s'%filt_name)
             except:
@@ -107,7 +107,7 @@ def multiNod(date, target_name, filt_list, flatfilt_list):
         else:
             try:
                 #do full data reduction for that filter
-                obs = nod.Nod(skyf[0], imagef[0])
+                obs = observation.Nod(skyf[0], imagef[0])
                 obs.apply_sky()
                 obs.apply_flat(outdir+'flat_master_'+flat_filt+'.fits')
                 obs.apply_badpx_map(outdir+'badpx_map_'+flat_filt+'.fits')

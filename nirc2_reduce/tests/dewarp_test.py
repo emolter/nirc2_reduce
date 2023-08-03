@@ -35,8 +35,8 @@ def dewarp(frame):
     That this works right can be checked by looking at difference maps 
         and comparing with the expected vectors in Service+16
     '''
-    warpx = fits.getdata('/Users/emolter/Python/nirc2_reduce/nirc2_distort_X_post20150413_v1.fits')
-    warpy = fits.getdata('/Users/emolter/Python/nirc2_reduce/nirc2_distort_Y_post20150413_v1.fits')
+    warpx = fits.getdata('../data/nirc2_distort_X_post20150413_v1.fits')
+    warpy = fits.getdata('../data/nirc2_distort_Y_post20150413_v1.fits')
     
     szx = frame.shape[0]
     szy = frame.shape[1]
@@ -97,5 +97,6 @@ ax5.imshow(diff_idl, origin='lower', vmin = np.min(diff_idl)/16, vmax = np.max(d
 ax5.quiver(*np.array([[i, k], [j,l]]), [warpx[i,j], warpx[k,l]], [warpy[i,j], warpy[k,l]], scale=2, color = 'red')
 ax5.set_title('Dewarped (IDL) - Original')
 
+fig.savefig('dewarp_test.png', dpi=300)
 plt.show()
     

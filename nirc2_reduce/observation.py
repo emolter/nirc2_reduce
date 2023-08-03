@@ -1,13 +1,11 @@
-#!/usr/bin/env python
 import numpy as np
 import matplotlib.pyplot as plt
 from astropy.io import fits
 from .image import Image
 from .prettycolors import make_colormap, get_colormap
-#from image import Image
 from scipy.signal import medfilt, fftconvolve
 from scipy.interpolate import RectBivariateSpline
-import astroscrappy, sys
+import astroscrappy
 from image_registration.chi2_shifts import chi2_shift
 from image_registration.fft_tools.shift import shiftnd, shift2d
 

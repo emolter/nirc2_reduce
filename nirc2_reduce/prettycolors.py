@@ -1,11 +1,16 @@
-#!/usr/bin/env python
-
 import matplotlib.colors as mcolors
 
+
 def make_colormap(seq):
-    """Return a LinearSegmentedColormap
-    seq: a sequence of floats and RGB-tuples. The floats should be increasing
+    """
+    Parameters
+    ----------
+    seq : a sequence of floats and RGB-tuples. The floats should be increasing
     and in the interval (0,1).
+    
+    Returns
+    -------
+    LinearSegmentedColormap
     """
     seq = [(None,) * 3, 0.0] + list(seq) + [1.0, (None,) * 3]
     cdict = {'red': [], 'green': [], 'blue': []}
@@ -18,8 +23,18 @@ def make_colormap(seq):
             cdict['blue'].append([item, b1, b2])
     return mcolors.LinearSegmentedColormap('CustomMap', cdict)
 
+
 def get_colormap(objname):
-    '''Custom colormaps for making pretty pictures of the data for website, etc.'''
+    '''
+    Description
+    -----------
+    Custom colormaps for making pretty pictures for Twilight Zone website
+    
+    Parameters
+    ----------
+    objname : str, required. name of target. currently supported:
+        io, neptune, titan, uranus
+    '''
     if objname.lower() == 'io':
         objmap = 'gist_heat'
     elif objname.lower() == 'neptune':

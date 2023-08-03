@@ -18,4 +18,4 @@ See DOCUMENTATION.py for sample workflows.
 This is not an official release version and some customization will be required. This software was built with Python 3.5; there may be compatibility issues with other versions of Python and packages may be deprecated. The many package dependencies are as-yet undocumented. Your development and pull requests are welcomed!
 
 # cite
-If you find this software useful for your research, please cite this page as a software citation - most journals will allow that nowadays.
+If you find this software useful for your research, please cite this page as a software citation - most journals will allow that nowadays.  Please note that some functionality that used to be in nirc2\_reduce is now located in the [pylanetary](https://github.com/emolter/pylanetary) package.
