@@ -78,7 +78,6 @@ obs.apply_sky(outdir+'sky_'+filt_name+'.fits')
 obs.apply_flat(outdir+'flat_master_'+flat_filt+'.fits')
 obs.apply_badpx_map(outdir+'badpx_map_'+flat_filt+'.fits')
 obs.dewarp()
-obs.trim()
 obs.remove_cosmic_rays() # at this step there remain a few spots where pixel value is much lower than Neptune pixels. Doubt this is the fault of cosmic ray program; possibly failing to find them in flats with bad pixel search. Perhaps multi-layer search, e.g. large blocksize first, small blocksize second
 obs.per_second()
 #to check any step use:
@@ -86,8 +85,9 @@ obs.plot_frames()
 
 # writing and stacking frames
 obs.write_frames([outdir+'frame0_nophot_'+filt_name+'.fits',outdir+'frame1_nophot_'+filt_name+'.fits',outdir+'frame2_nophot_'+filt_name+'.fits'])
+obs.trim()
 obs.stack()
-obs.crop(50)
+obs.crop_final(50)
 #check it
 plt.imshow(obs.final, origin = 'lower left')
 plt.show()
