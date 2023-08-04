@@ -23,3 +23,5 @@ sdist
 develop-eggs
 .installed.cfg
 distribute-*.tar.gz
+
+src/to_do.txt
