@@ -12,8 +12,8 @@ X move the rest of the functionality out of old/coordgrid.py and into pylanetary
 X package the package
 
 Fri, Aug 4
-8. test packaging using pip install -e
-9. try using the packaged version for TZ data reduction
+X test packaging using pip install -e
+X try using the packaged version for TZ data reduction
 10. update README.md with install instructions, links to publications, etc
 11. fix autodocs
 12. revisit multi_reduce.py, sort_rawfiles.py

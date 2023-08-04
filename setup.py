@@ -36,6 +36,7 @@ install_requires = [
     'sphinx',
     'nbsphinx',
     'pytest',
+    'setuptools-git',
     ]
 
 setup(
@@ -51,7 +52,10 @@ setup(
     python_requires='>=3.6',
     license="GPL3",
     keywords='planetary astronomy keck infrared detector',
-    packages=find_packages(),
+    packages=find_packages(include=['nirc2_reduce', 'nirc2_reduce.*']),
+    package_data = {
+        'nirc2_reduce': ['data/*.fits'],
+    },
     py_modules=['nirc2_reduce'],
     platforms=['any'],
     setup_requires=['pytest-runner'],

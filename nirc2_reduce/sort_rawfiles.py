@@ -1,8 +1,3 @@
-#!/usr/bin/env python
-
-'''Routines for sorting raw files for nirc2 data. Designed to feed into
-bxy3 and driver_bxy3'''
-
 import os, warnings
 import numpy as np
 from astropy.io import fits
