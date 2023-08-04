@@ -1,4 +1,5 @@
-[![DOI](https://zenodo.org/badge/458372674.svg)](https://zenodo.org/badge/latestdoi/458372674)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6584662.svg)](https://doi.org/10.5281/zenodo.6584662)
+
 [![Documentation Status](https://readthedocs.org/projects/nirc2-reduce/badge/?version=latest)](https://nirc2-reduce.readthedocs.io/en/latest/?badge=latest)
 
 

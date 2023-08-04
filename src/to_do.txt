@@ -9,10 +9,14 @@ X write a simple test for observation.Bxy3
 X test observation.Nod rewrite
 X write a simple test for observation.Nod
 X move the rest of the functionality out of old/coordgrid.py and into pylanetary, delete old
-5. package the package, make install easy
-6. update README.md with install instructions, links to publications, etc
-7. try using the packaged version for TZ data reduction
-8. revisit multi_reduce.py, sort_rawfiles.py
-9. get autoreduce.py working
-10. rewrite filt.py, fit_gaussian.py, imstack.py, phot.py and make tests
-11. better test of dewarp.py
+X package the package
+
+Fri, Aug 4
+8. test packaging using pip install -e
+9. try using the packaged version for TZ data reduction
+10. update README.md with install instructions, links to publications, etc
+11. fix autodocs
+12. revisit multi_reduce.py, sort_rawfiles.py
+13. get autoreduce.py working
+14. rewrite filt.py, fit_gaussian.py, imstack.py, phot.py and make tests
+15. better test of dewarp.py
