@@ -23,6 +23,3 @@ sdist
 develop-eggs
 .installed.cfg
 distribute-*.tar.gz
-
-nirc2_reduce/old
-nirc2_reduce/to_do.txt

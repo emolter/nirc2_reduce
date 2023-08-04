@@ -1,0 +1,13 @@
+astropy==5.3.1
+astroscrappy==1.1.0
+fsps==0.4.3
+image_registration==0.2.7.dev20+gb42a1af
+matplotlib==3.7.2
+nod==1.9.1
+numpy==1.25.1
+pyfits==3.5
+pyraf==2.2.1
+pysynphot==2.0.0
+pytest==7.4.0
+scipy==1.9.1
+setuptools==68.0.0

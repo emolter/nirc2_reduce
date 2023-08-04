@@ -1,1 +1,0 @@
-HD1160          00 15 57.30 +04 15 04.0 2000.0 rotmode=pa rotdest=0 vmag=7.14 rmag=7.14 hmag=7.013 jmag=6.983 kmag=7.04 lmag=7.055 mmag=7.04 sptype=A0V

@@ -1,0 +1,15 @@
+include README.md
+include LICENSE.txt
+include CONTRIBUTING.rst
+include pyproject.toml
+
+recursive-include nirc2_reduce *.pyx *.c *.pxd
+recursive-include docs *
+recursive-include licenses *
+recursive-include scripts *
+
+prune build
+prune docs/_build
+prune docs/api
+
+global-exclude *.pyc *.o
