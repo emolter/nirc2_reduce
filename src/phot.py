@@ -16,6 +16,7 @@ nearest_stand_filt = {'j':'j', 'he1a':'j', 'he1_a':'j', 'pagamma':'j', 'jcont':'
                       'lp':'l', 'lw':'l', 'bracont':'l', 'bra':'l', 'br_alpha':'l', 'bra_cont':'l', 'pah':'l',
                       'ms':'m'}
 
+
 def get_filt_info(filt):
     with open('/Users/emolter/Python/nirc2_reduce/filter_passbands/vega_fluxes.txt','r') as f:
         f.readline() #header
@@ -26,6 +27,25 @@ def get_filt_info(filt):
                 wl = float(l[1].strip(', \n'))
                 vega_mag = float(l[2].strip(', \n'))
                 return wl, vega_mag
+
+
+def airmass_correction(air_t, air_c, filt):
+    '''Helper to I/F. Computes correction factor to photometry based on airmass.
+       Multiply 
+       air_t is airmass of science target.
+       air_c is airmass of calibrator.
+       filt options are j, h, k, l, m. Use nearest one for narrowband filters'''
+    cdict = {'j': 0.102,
+             'h': 0.059,
+             'k': 0.088,
+             'l': 0.093,
+             'm': 0.220} #from https://www2.keck.hawaii.edu/realpublic/inst/nirc/exts.html
+    if filt == None:
+        return 1.0
+    tau = cdict[filt]
+    factor = np.exp(tau*air_t)/np.exp(tau*air_c)
+    return factor
+    
                 
 def get_factor(keck_filt):
     '''Queries table of conversions between flux in catalog filters and 
@@ -53,6 +73,7 @@ def get_factor(keck_filt):
                 return factor   
         print('Failed! Check filter_passbands/filter_conversions.txt to ensure proper filter conversion exists')
         return
+
 
 class bxy3Phot(Bxy3):
     

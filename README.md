@@ -1,4 +1,6 @@
 [![DOI](https://zenodo.org/badge/458372674.svg)](https://zenodo.org/badge/latestdoi/458372674)
+[![Documentation Status](https://readthedocs.org/projects/nirc2-reduce/badge/?version=latest)](https://nirc2-reduce.readthedocs.io/en/latest/?badge=latest)
+
 
 # nirc2_reduce
 Software for calibration, imaging, and analysis of infrared images of solar system objects.  Features include:
