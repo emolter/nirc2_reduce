@@ -8,8 +8,6 @@ import numpy as np
 import os
 from astropy.io import fits
 
-# until packaging is better and rootdir is found, can use
-# pytest --rootdir=/Users/emolter/Python/nirc2_reduce test_observation.py
 
 @fixture
 def datadir(request,tmpdir):

@@ -47,7 +47,8 @@ class Flats:
         outfile : str, required. output fits filename
         '''
         hdulist_out = self.dummy_fits.hdulist
-        hdulist_out[0].header['OBJECT'] = 'DOME_FLAT_MASTER'
+        hdulist_out[0].header['OBJECT'] = 'FLAT_MASTER'
+        hdulist_out[0].header['TARGNAME'] = 'FLAT_MASTER'
         hdulist_out[0].data = self.flat
         hdulist_out[0].writeto(outfile, overwrite=True)
         
@@ -87,6 +88,7 @@ class Flats:
         # change some header info and write to .fits
         hdulist_out = self.dummy_fits.hdulist
         hdulist_out[0].header['OBJECT'] = 'BADPX_MAP'
+        hdulist_out[0].header['TARGNAME'] = 'BADPX_MAP'
         hdulist_out[0].data = self.badpx_map
         hdulist_out[0].writeto(outfile, overwrite=True)
         
