@@ -17,23 +17,32 @@ def datadir(request,tmpdir):
     return path
     
     
-def test_datafiles_working(datadir):
+@fixture
+def rawdir(request,tmpdir):
+    rootdir = request.config.rootdir
+    path = os.path.join(rootdir, 'nirc2_reduce', 'tests', 'data', 'raw')
+    return path
     
-    assert os.path.isfile(os.path.join(datadir, 'off0.fits'))
+    
+def test_datafiles_working(rawdir, datadir):
+    
+    assert os.path.isfile(os.path.join(rawdir, 'off0.fits'))
+    assert os.path.isfile(os.path.join(datadir, 'flat_expected.fits'))
     
 
-def test_flats(datadir):
+def test_flats(datadir, rawdir):
     '''
-    fnames required in data/:
+    fnames required in data/raw:
         f'off{i}.fits') for i in range(5)
         f'on{i}.fits') for i in range(5)
+    fnames required in data/
         flat_expected.fits
         badpx_map_expected.fits
     '''
     
     # make the flat
-    domeflatoff = [os.path.join(datadir, f'off{i}.fits') for i in range(5)]
-    domeflaton = [os.path.join(datadir, f'on{i}.fits') for i in range(5)]
+    domeflatoff = [os.path.join(rawdir, f'off{i}.fits') for i in range(5)]
+    domeflaton = [os.path.join(rawdir, f'on{i}.fits') for i in range(5)]
     flat = flats.Flats(domeflatoff, domeflaton)
     flat.write(os.path.join(datadir, 'flat_test.fits'))
     

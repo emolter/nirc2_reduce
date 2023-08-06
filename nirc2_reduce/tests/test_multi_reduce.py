@@ -56,4 +56,8 @@ def test_MultiBxy3(datadir, rawdir, reddir, flatdir):
     badpx_expected = fits.open(os.path.join(datadir, 'badpx_map_expected.fits'))[0].data
     assert np.allclose(badpx_test, badpx_expected, rtol=1e-3)
     
+    ## cleanup: remove test files that were made
+    fnames = glob.glob(flatdir+'/*.fits') + glob.glob(reddir+'/*.fits') +  glob.glob(reddir+'/*.png')
+    for f in fnames:
+        os.remove(f)
     
