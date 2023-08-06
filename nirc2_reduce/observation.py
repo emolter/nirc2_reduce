@@ -1,5 +1,6 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import cm
 from astropy.io import fits
 from .image import Image
 from .prettycolors import make_colormap, get_colormap
@@ -24,8 +25,8 @@ def crop_center(frame, subc):
     '''
     shp = np.min([frame.shape[0], frame.shape[1]])
     ctr = int(shp/2)
-    ll = int(ctr - self.subc/2)
-    ul = int(ctr + self.subc/2)
+    ll = int(ctr - subc/2)
+    ul = int(ctr + subc/2)
     frame = frame[ll:ul,ll:ul]
     return frame
 
@@ -318,14 +319,14 @@ class Observation:
         '''
         fig, ax = plt.subplots(1,1, figsize=(8,8))
         try:
-            cmap = get_colormap(self.target)
+            cmap = get_colormap(self.target.split(' ')[0])
         except:
             print('No custom colormap defined for target, setting to default')
             cmap = cm.viridis
         ax.imshow(self.final, cmap = cmap, origin='lower')
         plt.tight_layout()
         if png_file is not None:
-            fig.savefig(png_file,bbox='None', dpi=300)
+            fig.savefig(png_file, dpi=300)
         if show:
             plt.show()
         plt.close()

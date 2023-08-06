@@ -31,8 +31,10 @@ def dfits_fitsort(input_wildcard, fits_kws=['OBJECT', 'DATE-OBS', 'FILTER', 'FLI
     '''
     fnames = glob.glob(input_wildcard)
     fnames = np.sort(fnames)
-    hdrs = [fits.getheader(f, 0, ignore_missing_end=True) for f in fnames]
-    vals = [ [fnames[i],] + [hdr[key] for key in fits_kws] for i, hdr in enumerate(hdrs) ]
+    with warnings.catch_warnings():
+        warnings.simplefilter('ignore')
+        hdrs = [fits.getheader(f, 0, ignore_missing_end=True) for f in fnames]
+        vals = [ [fnames[i],] + [hdr[key] for key in fits_kws] for i, hdr in enumerate(hdrs) ]
     
     names = ['FILENAME',]+fits_kws
     dtype = [str,]*len(names)
@@ -112,14 +114,4 @@ def get_flats(tab, isdome_kw='TARGNAME', isdome_arg='DOME', lamps_kw='FLSPECTR',
     flaton = ons['FILENAME'].data
     
     return flatoff, flaton
-    
-
-if __name__ == "__main__":
-    
-    input_wildcard = '/Users/emolter/Python/nirc2_reduce/nirc2_reduce/tests/data/*.fits'
-    tab = dfits_fitsort(input_wildcard, fits_kws=['OBJECT', 'TARGNAME', 'FILTER', 'FLSPECTR'])
-    offs, ons = get_flats(tab)
-    
-    print(ons)
-    print(offs)
 

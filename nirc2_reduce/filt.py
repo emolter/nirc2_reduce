@@ -6,6 +6,13 @@ import fsps
 import pysynphot
 
 
+nearest_stand_filt = {'j':'j', 'he1a':'j', 'he1_a':'j', 'pagamma':'j', 'jcont':'j', 'pabeta':'j',
+                      'h':'h', 'hcont':'h', 'ch4s':'h', 'ch4_short':'h', 'feii':'h', 'ch4l':'h', 'ch4_long':'h',
+                      'k':'k', 'kp':'k', 'kcont':'k', 'ks':'k', 'he1b':'k', 'brgamma':'k', 'br_gamma':'k', 'h210':'k', 'h221':'k', 'co':'k', 'h2o':'k', 'h2o_ice':'k',
+                      'lp':'l', 'lw':'l', 'bracont':'l', 'bra':'l', 'br_alpha':'l', 'bra_cont':'l', 'pah':'l',
+                      'ms':'m'}
+
+
 class Filt:
     
     def __init__(self, filt, isfsps = False):
