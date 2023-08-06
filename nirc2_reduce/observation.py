@@ -4,8 +4,9 @@ from matplotlib import cm
 from astropy.io import fits
 from .image import Image
 from .prettycolors import make_colormap, get_colormap
-from scipy.signal import medfilt, fftconvolve
+from scipy.signal import medfilt
 from scipy.interpolate import RectBivariateSpline
+from scipy.ndimage import rotate
 import astroscrappy
 from image_registration.chi2_shifts import chi2_shift
 from image_registration.fft_tools.shift import shiftnd, shift2d
@@ -186,6 +187,39 @@ class Observation:
             #plt.imshow(frame_dw, origin='lower')
             #plt.show()
         self.frames = np.asarray(frames_dewarp)
+        
+        
+    def rotate(self, custom_angle=0.0, beta = 0.252):
+        '''
+        Description
+        -----------
+        Rotate frame to North up plus an additional custom angle
+        if header contains 'ROTPOSN' and 'INSTANGL' keywords (i.e., nirc2-like),
+        then rotation is custom_angle + (ROTPOSN-INSTANGL) - beta, counterclockwise.
+        otherwise, rotation is simply custom_angle - beta, counterclockwise.
+        see https://github.com/jluastro/nirc2_distortion/wiki
+        
+        Parameters
+        ----------
+        custom_angle : float, optional. default 0.0. units degrees.
+            user-defined additional angle to rotate frames
+            counterclockwise is positive to agree with scipy.ndimage.rotate
+        beta : float, optional. default 0.252 (nirc2 post 2015). units degrees.
+            rotation required to get North up according to astrometry solution
+            clockwise is positive to agree with definition of beta given by
+            the nirc2 distortion wiki
+            
+        Notes
+        -----
+        This should be generalized to include scopes other than nirc2 more easily
+        however, for typical observations ROTPOSN - INSTANGL is zero anyway
+        '''
+        hdr = self.dummy_fits.hdulist[0].header
+        try:
+            total_rotation_ccw = custom_angle + hdr['ROTPOSN'] - hdr['INSTANGL'] - beta
+        except KeyError:
+            warnings.warn('header keywords ROTPOSN and/or INSTANGL not found; setting rotation to custom_angle - beta')
+        self.frames = np.array([rotate(frame, total_rotation_ccw, reshape=False) for frame in self.frames])
         
         
     def remove_cosmic_rays(self):

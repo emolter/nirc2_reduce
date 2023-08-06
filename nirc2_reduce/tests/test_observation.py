@@ -16,24 +16,25 @@ def datadir(request,tmpdir):
     return path
     
     
-def test_datafiles_working(datadir):
+@fixture
+def rawdir(request,tmpdir):
+    rootdir = request.config.rootdir
+    path = os.path.join(rootdir, 'nirc2_reduce', 'tests', 'data', 'raw')
+    return path
     
-    assert os.path.isfile(os.path.join(datadir, 'bxy3_1.fits'))
+    
+def test_datafiles_working(datadir, rawdir):
+    
+    assert os.path.isfile(os.path.join(rawdir, 'bxy3_1.fits'))
+    assert os.path.isfile(os.path.join(datadir, 'badpx_map_expected.fits'))
 
 
-def test_bxy3(datadir):
-    '''
-    fnames required in data/: 
-        sky_expected.fits
-        flat_expected.fits
-        badpx_map_expected.fits
-        bxy3_stack_expected.fits
-    '''
+def test_bxy3(datadir, rawdir):
     
     # run the bxy3 workflow
-    fnames = [os.path.join(datadir, 'bxy3_1.fits'), 
-                os.path.join(datadir, 'bxy3_2.fits'), 
-                os.path.join(datadir, 'bxy3_3.fits')]
+    fnames = [os.path.join(rawdir, 'bxy3_1.fits'), 
+                os.path.join(rawdir, 'bxy3_2.fits'), 
+                os.path.join(rawdir, 'bxy3_3.fits')]
     obs = observation.Bxy3(fnames)
     obs.make_sky(os.path.join(datadir, 'sky_test.fits'))
     obs.apply_sky(os.path.join(datadir, 'sky_expected.fits'))
@@ -58,20 +59,14 @@ def test_bxy3(datadir):
     stack_expected = fits.open(os.path.join(datadir, 'bxy3_stack_expected.fits'))[0].data
     assert np.allclose(stack_test, stack_expected, rtol=1e-3)
     
-    ## cleanup: remove test fits
+    ### cleanup: remove test fits
     os.remove(os.path.join(datadir, 'sky_test.fits'))
     os.remove(os.path.join(datadir, 'bxy3_stack_test.fits'))
     
     
-def test_nod(datadir):
-    '''
-    fnames required in data/: 
-        sky_expected.fits
-        flat_expected.fits
-        badpx_map_expected.fits
-        nod_expected.fits
-    '''
-    obs = observation.Nod(os.path.join(datadir, 'bxy3_2.fits'), 
+def test_nod(datadir, rawdir):
+
+    obs = observation.Nod(os.path.join(rawdir, 'bxy3_2.fits'), 
         os.path.join(datadir, 'sky_expected.fits'))
     obs.apply_sky()
     obs.apply_flat(os.path.join(datadir, 'flat_expected.fits'))

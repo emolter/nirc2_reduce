@@ -233,6 +233,8 @@ class MultiNod(MultiReduce):
     
     def __init__(self, rawdir):
         
+        raise NotImplementedError()
+        
         super().__init__(rawdir)
         
         
