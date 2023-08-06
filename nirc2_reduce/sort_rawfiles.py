@@ -21,7 +21,7 @@ def dfits_fitsort(input_wildcard, fits_kws=['OBJECT', 'DATE-OBS', 'FILTER', 'FLI
     input_wildcard : str, required. path to filenames
         wildcards are allowed, as long as glob.glob()
         can read it.
-        example 'raw/2023jul14/*.fits'
+        example 'raw/2023jul14/\*.fits'
     fits_kws : list, optional. default ['OBJECT', 'FILTER']
         which keywords to include in the output table
     
