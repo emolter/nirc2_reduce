@@ -1,13 +1,9 @@
 astropy
 astroscrappy
-fsps
-git+https://github.com/keflavich/image_registration.git
 matplotlib
 nod
 numpy
-pyfits
-pyraf
-pysynphot
 pytest
 scipy
 setuptools
+git+https://github.com/keflavich/image_registration.git
