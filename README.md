@@ -1,4 +1,5 @@
 [![Documentation Status](https://readthedocs.org/projects/nirc2-reduce/badge/?version=latest)](https://nirc2-reduce.readthedocs.io/en/latest/?badge=latest)
+[![codecov](https://codecov.io/gh/emolter/nirc2_reduce/branch/master/graph/badge.svg?token=9N09Z533CP)](https://codecov.io/gh/emolter/nirc2_reduce)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.6584662.svg)](https://doi.org/10.5281/zenodo.6584662)
 
 
@@ -15,7 +16,7 @@ This package has been applied successfully to NIRC2, OSIRIS, and Lick ShARCS dat
 Example images of Solar System planets made using this pipeline are available at the [Keck Twilight Zone website](https://www2.keck.hawaii.edu/inst/tda/TwilightZone.html#). 
 
 # Usage
-The readthedocs page is in progress. For now, see DOCUMENTATION.py for sample workflows.
+See readthedocs page for example workflows
 
 # Caveats
 This is not yet an official release version, and some customization will be required. This software was originally written in 2016 when I was a first-year grad student and had no idea how to package code. At the time of writing, only the flats and observation modules have been rewritten and nicely packaged; I'm working on the rest. Your development and pull requests are welcomed!
