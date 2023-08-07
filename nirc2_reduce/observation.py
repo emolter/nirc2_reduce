@@ -10,7 +10,7 @@ from scipy.ndimage import rotate
 import astroscrappy
 from image_registration.chi2_shifts import chi2_shift
 from image_registration.fft_tools.shift import shiftnd, shift2d
-import importlib
+import importlib.resources
 import warnings
 
 
