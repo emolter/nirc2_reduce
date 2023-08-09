@@ -10,11 +10,12 @@ Python API
 .. automodule:: nirc2_reduce.flats
     :members:
 
+.. automodule:: nirc2_reduce.sort_rawfiles
+    :members:
+
 .. automodule:: nirc2_reduce.image
     :members:
 
 .. automodule:: nirc2_reduce.prettycolors
     :members:
 
-.. automodule:: nirc2_reduce.sort_rawfiles
-    :members:

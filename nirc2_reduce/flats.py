@@ -6,15 +6,11 @@ import warnings
 
 class Flats:
     """
-    Description
-    -----------
     class for dome flats
     """
 
     def __init__(self, fnames_off, fnames_on):
         """
-        Description
-        -----------
         subtract lights off from lights on,
         divide by median value to center it around 1
         
@@ -57,8 +53,6 @@ class Flats:
 
     def make_badpx_map(self, outfile, tol=0.07, blocksize=6):
         """
-        Description
-        -----------
         Find pixels whose values are very far from the average of their neighbors
         Bad pixel is defined as 
         abs(pixel value / median of nearby pixels - 1) > tol

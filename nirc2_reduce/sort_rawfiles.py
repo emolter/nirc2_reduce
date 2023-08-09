@@ -22,8 +22,6 @@ def dfits_fitsort(
     fits_kws=[ "OBJECT", "DATE-OBS", "FILTER"]
     ):
     """
-    Description
-    -----------
     Python implementation of the dfits | fitsort bash script workflow
     Searches headers of all fits in input_dir
     to find the requested keywords
@@ -87,8 +85,6 @@ def get_flats(
     ignore_objects=["FLAT", "BADPX", "FLAT_MASTER", "DOME_FLAT_MASTER", "BADPX_MAP"],
 ):
     """
-    Description
-    -----------
     scrub table from dfits_fitsort to find domeflaton, domeflatoff filenames
     default params are for NIRC2
     
@@ -127,7 +123,6 @@ def get_flats(
 
     # find ons and offs
     onoff, dometabs = split_by_kw(dometab, header_kw_dict['lamps']['kw'])
-    print(onoff)
     ons = dometabs[np.argwhere(onoff == header_kw_dict['lamps']['lampon'])[0, 0]]
     offs = dometabs[np.argwhere(onoff == header_kw_dict['lamps']['lampoff'])[0, 0]]
     flatoff = offs["FILENAME"].data

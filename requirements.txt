@@ -4,6 +4,7 @@ matplotlib
 nod
 numpy
 pytest
+pyyaml
 scipy
 setuptools
 git+https://github.com/keflavich/image_registration.git

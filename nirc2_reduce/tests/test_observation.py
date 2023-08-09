@@ -76,6 +76,7 @@ def test_nod(datadir, rawdir):
     )
     obs.apply_sky()
     obs.apply_flat(os.path.join(datadir, "flat_expected.fits"))
+    assert (not np.any(np.isnan(obs.frames)))
     obs.apply_badpx_map(os.path.join(datadir, "badpx_map_expected.fits"))
     obs.dewarp()
     obs.remove_cosmic_rays()
@@ -90,3 +91,14 @@ def test_nod(datadir, rawdir):
 
     ## cleanup: remove test fits
     os.remove(os.path.join(datadir, "nod_test.fits"))
+
+
+def test_raises(datadir, rawdir):
+    
+    obs = observation.Nod(
+        os.path.join(rawdir, "bxy3_2.fits"), os.path.join(datadir, "sky_expected.fits"), "nirc2"
+    )
+    obs.frames = np.empty(obs.frames.shape)
+    obs.frames[:] = np.nan
+    with pytest.raises(ValueError) as e_info:
+        obs.remove_cosmic_rays()

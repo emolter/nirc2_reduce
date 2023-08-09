@@ -12,7 +12,9 @@ Welcome to nirc2_reduce's documentation!
 
    installation
    description
-   workflows
+   example-reduction-workflows
+   generalize
+   contributing
    attribution
    api
 

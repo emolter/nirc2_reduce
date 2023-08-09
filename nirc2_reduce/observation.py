@@ -44,8 +44,6 @@ def crop_center(frame, subc):
 
 class Observation:
     """
-    Description
-    -----------
     Generic class containing dithers and nods
     To define a custom dither pattern, inherit from this class
     See Bxy3() and Nod() objects for usage
@@ -95,8 +93,6 @@ class Observation:
 
     def apply_flat(self, fname):
         """
-        Description
-        -----------
         applies flatfield correction
         
         Parameters
@@ -112,13 +108,16 @@ class Observation:
         frames_flat = []
         for frame in self.frames:
             with np.errstate(divide="ignore", invalid="ignore"):
-                frames_flat.append(frame / flat)
+                frame_flat = frame / flat
+                # solve NaNs, but first ensure we didn't get a huge fraction of NaNs
+                if np.sum(np.isnan(frame_flat))/(frame_flat.size) < 0.1:
+                    frame_flat[np.isnan(frame_flat)] = 0.0
+                frames_flat.append(frame_flat)
+            
         self.frames = np.asarray(frames_flat)
 
     def apply_badpx_map(self, fname, kernel_size=7):
         """
-        Description
-        -----------
         Replaces all bad pixels in input map with the median of the pixels
         around it.
         
@@ -149,8 +148,6 @@ class Observation:
 
     def dewarp(self):
         """
-        Description
-        -----------
         Apply nirc2 distortion correction using updated maps 
         from Ghez, Lu galactic center group (Service et al. 2016)
         doi:10.1088/1538-3873/128/967/095004
@@ -180,10 +177,10 @@ class Observation:
         warpx_file = self.header_kw_dict['warpx_file']
         warpy_file = self.header_kw_dict['warpy_file']
         distortion_source_x = importlib.resources.open_binary(
-            "nirc2_reduce.data", f"{warpx_file}"
+            "nirc2_reduce.data.distortion", f"{warpx_file}"
         )
         distortion_source_y = importlib.resources.open_binary(
-            "nirc2_reduce.data", f"{warpy_file}"
+            "nirc2_reduce.data.distortion", f"{warpy_file}"
         )
         warpx = fits.getdata(distortion_source_x)
         warpy = fits.getdata(distortion_source_y)
@@ -197,8 +194,7 @@ class Observation:
             ul = int(ctr + self.subc / 2)
             warpx = warpx[ll:ul, ll:ul]
             warpy = warpy[ll:ul, ll:ul]
-        # plt.imshow(warpx,origin='lower')
-        # plt.show()
+
         szx = self.frames[0].shape[0]
         szy = self.frames[0].shape[0]
         xx = np.linspace(0, szx - 1, szx)
@@ -209,6 +205,7 @@ class Observation:
         flatx = mapx.flatten()
         flaty = mapy.flatten()
         frames_dewarp = []
+        
         for frame in self.frames:
             frame_spline = RectBivariateSpline(xx, yy, frame)
             frame_dw = frame_spline.ev(flatx, flaty).reshape(frame.shape).T
@@ -219,8 +216,6 @@ class Observation:
 
     def rotate(self, custom_angle=0.0, beta=0.252):
         """
-        Description
-        -----------
         Rotate frame to North up plus an additional custom angle
         if header contains 'ROTPOSN' and 'INSTANGL' keywords (i.e., nirc2-like),
         then rotation is custom_angle + (ROTPOSN-INSTANGL) - beta, counterclockwise.
@@ -253,15 +248,21 @@ class Observation:
             [rotate(frame, total_rotation_ccw, reshape=False) for frame in self.frames]
         )
 
-    def remove_cosmic_rays(self):
+    def remove_cosmic_rays(self, **kwargs):
         """
-        Description
-        -----------
         Detects cosmic rays using the astroscrappy package
+        
+        Parameters
+        ----------
+        **kwargs : dict, optional
+            keyword arguments to astroscrappy.detect_cosmics()
         """
         frames_cosray = []
         for frame in self.frames:
-            crmask, cleanarr = astroscrappy.detect_cosmics(frame, cleantype="medmask")
+            if np.all(np.isnan(frame)):
+                # catches seg fault when passing all nans to detect_cosmics
+                raise ValueError('Tried to pass all NaNs to astroscrappy.detect_cosmics')
+            crmask, cleanarr = astroscrappy.detect_cosmics(frame, cleantype="medmask", **kwargs)
             # fig, (ax0,ax1,ax2) = plt.subplots(1,3, figsize=(15,6))
             # ax0.imshow(frame,origin = 'lower')
             # ax1.imshow(crmask,origin = 'lower')
@@ -272,8 +273,6 @@ class Observation:
 
     def per_second(self):
         """
-        Description
-        -----------
         Changes units to counts/second by dividing by
         ITIME x COADDS
         
@@ -294,8 +293,6 @@ class Observation:
 
     def apply_photometry_frames(self, flux_per):
         """
-        Description
-        -----------
         Simply multiplies each frame by flux density / (cts/s)
         
         Parameters
@@ -307,8 +304,6 @@ class Observation:
 
     def apply_photometry_final(self, flux_per):
         """
-        Description
-        -----------
         Simply multiplies each frame by flux density / (cts/s)
         
         Parameters
@@ -320,8 +315,6 @@ class Observation:
 
     def stack(self):
         """
-        Description
-        -----------
         Cross-correlate the images applying sub-pixel shift.
         Shift found using DFT upsampling method from image_registration.
         Stack them on top of each other to increase SNR.
@@ -337,8 +330,6 @@ class Observation:
 
     def crop_final(self, bw):
         """
-        Description
-        -----------
         Applies crop to the final image. 
         
         Parameters
@@ -349,10 +340,8 @@ class Observation:
         szx, szy = self.final.shape[0], self.final.shape[1]
         self.final = self.final[bw : szx - bw, bw : szy - bw]
 
-    def plot_frames(self, png_file=None):
+    def plot_frames(self, png_file=None, figsz=3):
         """
-        Description
-        -----------
         Plot the individual frames any step in the process
         
         Parameters
@@ -362,11 +351,14 @@ class Observation:
             if None, image not saved
         """
         n = len(self.frames)
-        fig, axes = plt.subplots(1, n, figsize=(3 * n, 4))
-        for i in range(len(axes)):
+        fig, axes = plt.subplots(1, n, figsize=(figsz * n, figsz+1))
+        for i in range(n):
             plotframe = self.frames[i]
             vmax = np.nanmax(medfilt(plotframe, kernel_size=7))
-            ax = axes[i]
+            if n > 1:
+                ax = axes[i]
+            else:
+                ax = axes
             ax.imshow(plotframe, origin="lower", vmin=0, vmax=vmax)
             ax.set_title("Frame %d" % i)
             ax.set_xticks([])
@@ -401,8 +393,6 @@ class Observation:
 
     def write_frames(self, outfiles):
         """
-        Description
-        -----------
         Write each individual frame to .fits at any step in the process
         
         Parameters
@@ -419,8 +409,6 @@ class Observation:
 
     def write_final(self, outfile):
         """
-        Description
-        -----------
         Writes the final stacked frame to .fits
         
         Parameters
@@ -439,13 +427,7 @@ class Observation:
 
 class Nod(Observation):
     """
-    Description
-    -----------
     simple on-off nod dither pattern
-    
-    To do
-    -----
-    how to make it so self.final gets defined if there is no stack() function?
     """
 
     def __init__(self, data_fname, sky_fname, instrument):
@@ -468,16 +450,12 @@ class Nod(Observation):
 
     def apply_sky(self):
         """
-        Description
-        -----------
         simply subtract the sky frame from the data
         """
         self.frames = np.array([data - self.sky for data in self.frames])
 
     def uranus_crop(self, bw):
         """
-        Description
-        -----------
         Custom crop for Uranus data. We use the right side of the
         NIRC2 detector to avoid the bad pixels in the lower left corner
         so just cutting off the left bit here
@@ -493,35 +471,11 @@ class Nod(Observation):
 
 class Bxy3(Observation):
     """
-    Description
-    -----------
     The famous bxy3 dither at Keck,
     which avoids the noisier lower left quadrant of the detector
     input fnames MUST be in the conventional order 
     where target is in positions
     [top left, bottom right, top right]
-        
-    Workflow
-    --------
-    obs = bxy3.Bxy3(fnames)
-    ## to check any step use:
-    # obs.plot_frames()
-    obs.make_sky(outdir+'sky_'+filt_name+'.fits')
-    obs.apply_sky(outdir+'sky_'+filt_name+'.fits')
-    obs.apply_flat(outdir+'flat_master_'+flat_filt+'.fits')
-    obs.apply_badpx_map(outdir+'badpx_map_'+flat_filt+'.fits')
-    obs.dewarp()
-    obs.remove_cosmic_rays() # at this step there remain a few spots where pixel value is much lower than Neptune pixels. Doubt this is the fault of cosmic ray program; possibly failing to find them in flats with bad pixel search. Perhaps multi-layer search, e.g. large blocksize first, small blocksize second
-    obs.rotate()
-    obs.per_second()
-    obs.write_frames([outdir+'frame0_nophot_'+filt_name+'.fits',outdir+'frame1_nophot_'+filt_name+'.fits',outdir+'frame2_nophot_'+filt_name+'.fits'])
-    obs.trim()
-    obs.stack()
-    obs.crop_final(50)
-    #check final
-    plt.imshow(obs.final, origin = 'lower left')
-    plt.show()
-    obs.write_final(outdir+'stacked_nophot_'+filt_name+'.fits')#,png=True, png_file = outdir+target_name+'_'+filt_name+'.png')
     """
 
     def __init__(self, fnames, instrument):
@@ -537,10 +491,7 @@ class Bxy3(Observation):
 
     def make_sky(self, outfile):
         """
-        Description
-        -----------
-        Make a sky frame via simple median-average of the frames
-        Works because the planet is in only one quadrant at a time
+        Make a sky frame via simple median-average of the frames.
         Writes fits file containing the sky frame
         with header info same as zeroth input bxy3 file
         
@@ -558,7 +509,8 @@ class Bxy3(Observation):
         hdulist_out[0].writeto(outfile, overwrite=True)
 
     def apply_sky(self, fname):
-        """identify patches of "normal" sky in each of the three bxy3 frames. 
+        """
+        identify patches of "normal" sky in each of the three bxy3 frames. 
         comes up with a median average value of background for each frame. 
         Then you normalize the "full" sky frame we got from median of bxy3 
         to the value of the sky brightness in the single frame.
@@ -617,8 +569,6 @@ class Bxy3(Observation):
 
     def trim(self):
         """
-        Description
-        -----------
         Clips each image in bxy3 to its own quadrant.
         Relies on frames input being in correct order.
         Should be applied just before stacking
@@ -640,23 +590,6 @@ class DitherN(Observation):
     '''
     Generic N-position dither; fnames can have arbitrary length
     will make sky by simple median average
-    
-    Workflow
-    --------
-    obs = DitherN(fnames, 'osiris')
-    obs.make_sky(outdir+'sky_'+filt_name+'.fits')
-    obs.apply_sky(outdir+'sky_'+filt_name+'.fits')
-    obs.apply_flat(outdir+'flat_master_'+flat_filt+'.fits')
-    obs.apply_badpx_map(outdir+'badpx_map_'+flat_filt+'.fits')
-    obs.dewarp() #no distortion solution for osiris at time of writing
-    obs.remove_cosmic_rays()
-    obs.rotate() #no distortion solution for osiris at time of writing
-    obs.per_second()
-    obs.write_frames([outdir+'frame0_nophot_'+filt_name+'.fits',outdir+'frame1_nophot_'+filt_name+'.fits',outdir+'frame2_nophot_'+filt_name+'.fits'])
-    obs.stack()
-    obs.crop_final(500)
-    obs.plot_final(show=True, png_file=outdir+'stacked_nophot_'+filt_name+'.png')
-    obs.write_final(outdir+'stacked_nophot_'+filt_name+'.fits')
     '''
     
     def __init__(self, fnames, instrument):
@@ -672,8 +605,6 @@ class DitherN(Observation):
         
     def make_sky(self, outfile):
         """
-        Description
-        -----------
         Make a sky frame via simple median-average of the frames
         Identical to Bxy3.make_sky()
         
@@ -693,8 +624,6 @@ class DitherN(Observation):
     
     def apply_sky(self, fname):
         """
-        Description
-        -----------
         simply subtract the sky frame from the data
         
         Parameters

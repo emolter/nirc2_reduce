@@ -21,8 +21,8 @@ def find_nearest(array, value):
 
 class MultiReduce:
     """
-    Description
-    -----------
+    
+    
     superclass to multiBxy3 and multiNod
     """
 
@@ -58,8 +58,6 @@ class MultiReduce:
         flatdir,
         **badpx_kwargs):
         """
-        Description
-        -----------
         check for new dome flats in rawdir, 
         make new flats for each filter present and put into flatdir
         
@@ -115,8 +113,6 @@ class MultiReduce:
 
     def _find_flats(self, flatdir, date, filt):
         """
-        Description
-        -----------
         find nearest-in-time flat and badpx map
         searches flatdir for nearest-in-time flats
         and badpx maps. assumes filenames in flats/ match the wildcards
@@ -169,8 +165,6 @@ class MultiReduce:
 
 class MultiBxy3(MultiReduce):
     """
-    Description
-    -----------
     run multiple filters and objects in a single date of observing
     
     Example
