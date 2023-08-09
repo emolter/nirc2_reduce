@@ -36,6 +36,7 @@ install_requires = [
     'sphinx',
     'nbsphinx',
     'pytest',
+    'pyyaml',
     'setuptools-git',
     ]
 

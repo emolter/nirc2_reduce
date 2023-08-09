@@ -12,6 +12,15 @@ from image_registration.chi2_shifts import chi2_shift
 from image_registration.fft_tools.shift import shiftnd, shift2d
 import importlib.resources
 import warnings
+import yaml
+import nirc2_reduce.data.header_kw_dicts as inst_info
+
+
+'''
+To do
+-----
+weight stacks by integration time (?)
+'''
 
 
 def crop_center(frame, subc):
@@ -35,32 +44,36 @@ def crop_center(frame, subc):
 
 class Observation:
     """
-    Description
-    -----------
     Generic class containing dithers and nods
     To define a custom dither pattern, inherit from this class
     See Bxy3() and Nod() objects for usage
     """
 
-    def __init__(self, fnames, subc_kw="NAXIS1", obj_kw="OBJECT"):
+    def __init__(self, fnames, instrument):
         """
         Parameters
         ----------
         fnames : list or str, required. 
             filenames of data frames. 
             if str, assume passing single data frame
-        subc_kw : str, optional. default NAXIS1
-            header keyword from which to scrub subc
-        obj_kw : str, optional. default OBJECT
-            header keyword from which to scrub target name
+        instrument : str, required.
+            name of instrument used, e.g. nirc2. 
+            will look for file data/{instrument}.yaml
+            in order to scrub header keywords
         
         Attributes
         ----------
         dummy_fits : nirc2_reduce.image.Image of the zeroth frame
         frames : np.array, shape (n, x, y) for the n input fits images
+        instrument : input instrument string
         subc : int. size of the subarray
         target : str. the object you observed, scrubbed from the header.
         """
+        self.instrument = instrument.lower()
+        with importlib.resources.open_binary(inst_info, f"{self.instrument}.yaml") as file:
+            yaml_bytes = file.read()
+            self.header_kw_dict = yaml.safe_load(yaml_bytes)
+        
         if type(fnames) == str:
             fnames = [
                 fnames,
@@ -68,8 +81,8 @@ class Observation:
 
         self.dummy_fits = Image(fnames[0])  # used to hijack header info
         self.frames = np.asarray([Image(f).data for f in fnames])
-        self.subc = self.dummy_fits.hdulist[0].header[subc_kw]
-        self.target = self.dummy_fits.hdulist[0].header[obj_kw]
+        self.subc = int(self.dummy_fits.header[self.header_kw_dict['subc']])
+        self.target = self.dummy_fits.header[self.header_kw_dict['object']]
 
         if self.frames[0].shape[0] != self.subc or self.frames[0].shape[1] != self.subc:
             # subarrays smaller than 512x512 on Keck are not square. chop out center
@@ -80,8 +93,6 @@ class Observation:
 
     def apply_flat(self, fname):
         """
-        Description
-        -----------
         applies flatfield correction
         
         Parameters
@@ -97,13 +108,16 @@ class Observation:
         frames_flat = []
         for frame in self.frames:
             with np.errstate(divide="ignore", invalid="ignore"):
-                frames_flat.append(frame / flat)
+                frame_flat = frame / flat
+                # solve NaNs, but first ensure we didn't get a huge fraction of NaNs
+                if np.sum(np.isnan(frame_flat))/(frame_flat.size) < 0.1:
+                    frame_flat[np.isnan(frame_flat)] = 0.0
+                frames_flat.append(frame_flat)
+            
         self.frames = np.asarray(frames_flat)
 
     def apply_badpx_map(self, fname, kernel_size=7):
         """
-        Description
-        -----------
         Replaces all bad pixels in input map with the median of the pixels
         around it.
         
@@ -132,14 +146,8 @@ class Observation:
             frames_badpx.append(frame)
         self.frames = np.asarray(frames_badpx)
 
-    def dewarp(
-        self,
-        warpx_file="nirc2_distort_X_post20150413_v1.fits",
-        warpy_file="nirc2_distort_Y_post20150413_v1.fits",
-    ):
+    def dewarp(self):
         """
-        Description
-        -----------
         Apply nirc2 distortion correction using updated maps 
         from Ghez, Lu galactic center group (Service et al. 2016)
         doi:10.1088/1538-3873/128/967/095004
@@ -166,26 +174,27 @@ class Observation:
         in a subdirectory of tests/
         and comparing with the expected vectors in Service+16
         """
+        warpx_file = self.header_kw_dict['warpx_file']
+        warpy_file = self.header_kw_dict['warpy_file']
         distortion_source_x = importlib.resources.open_binary(
-            "nirc2_reduce.data", f"{warpx_file}"
+            "nirc2_reduce.data.distortion", f"{warpx_file}"
         )
         distortion_source_y = importlib.resources.open_binary(
-            "nirc2_reduce.data", f"{warpy_file}"
+            "nirc2_reduce.data.distortion", f"{warpy_file}"
         )
         warpx = fits.getdata(distortion_source_x)
         warpy = fits.getdata(distortion_source_y)
 
         # handle subarrays
         if (
-            self.subc != 1024
+            self.subc != warpx.shape[0]
         ):  # hardcode because dewarp arrays will always be full size of detector
-            ctr = 512
+            ctr = warpx.shape[0]/2
             ll = int(ctr - self.subc / 2)
             ul = int(ctr + self.subc / 2)
             warpx = warpx[ll:ul, ll:ul]
             warpy = warpy[ll:ul, ll:ul]
-        # plt.imshow(warpx,origin='lower')
-        # plt.show()
+
         szx = self.frames[0].shape[0]
         szy = self.frames[0].shape[0]
         xx = np.linspace(0, szx - 1, szx)
@@ -196,6 +205,7 @@ class Observation:
         flatx = mapx.flatten()
         flaty = mapy.flatten()
         frames_dewarp = []
+        
         for frame in self.frames:
             frame_spline = RectBivariateSpline(xx, yy, frame)
             frame_dw = frame_spline.ev(flatx, flaty).reshape(frame.shape).T
@@ -206,8 +216,6 @@ class Observation:
 
     def rotate(self, custom_angle=0.0, beta=0.252):
         """
-        Description
-        -----------
         Rotate frame to North up plus an additional custom angle
         if header contains 'ROTPOSN' and 'INSTANGL' keywords (i.e., nirc2-like),
         then rotation is custom_angle + (ROTPOSN-INSTANGL) - beta, counterclockwise.
@@ -229,7 +237,7 @@ class Observation:
         This should be generalized to include scopes other than nirc2 more easily
         however, for typical observations ROTPOSN - INSTANGL is zero anyway
         """
-        hdr = self.dummy_fits.hdulist[0].header
+        hdr = self.dummy_fits.header
         try:
             total_rotation_ccw = custom_angle + hdr["ROTPOSN"] - hdr["INSTANGL"] - beta
         except KeyError:
@@ -240,15 +248,21 @@ class Observation:
             [rotate(frame, total_rotation_ccw, reshape=False) for frame in self.frames]
         )
 
-    def remove_cosmic_rays(self):
+    def remove_cosmic_rays(self, **kwargs):
         """
-        Description
-        -----------
         Detects cosmic rays using the astroscrappy package
+        
+        Parameters
+        ----------
+        **kwargs : dict, optional
+            keyword arguments to astroscrappy.detect_cosmics()
         """
         frames_cosray = []
         for frame in self.frames:
-            crmask, cleanarr = astroscrappy.detect_cosmics(frame, cleantype="medmask")
+            if np.all(np.isnan(frame)):
+                # catches seg fault when passing all nans to detect_cosmics
+                raise ValueError('Tried to pass all NaNs to astroscrappy.detect_cosmics')
+            crmask, cleanarr = astroscrappy.detect_cosmics(frame, cleantype="medmask", **kwargs)
             # fig, (ax0,ax1,ax2) = plt.subplots(1,3, figsize=(15,6))
             # ax0.imshow(frame,origin = 'lower')
             # ax1.imshow(crmask,origin = 'lower')
@@ -257,10 +271,8 @@ class Observation:
             frames_cosray.append(cleanarr)
         self.frames = np.asarray(frames_cosray)
 
-    def per_second(self, itime_kw="ITIME", coadd_kw="COADDS"):
+    def per_second(self):
         """
-        Description
-        -----------
         Changes units to counts/second by dividing by
         ITIME x COADDS
         
@@ -271,9 +283,9 @@ class Observation:
         coadd_kw : str, optional.
             keyword to scrub fits header for coadds
         """
-        header = self.dummy_fits.hdulist[0].header
-        tint = header[itime_kw]
-        coadd = header[coadd_kw]
+        header = self.dummy_fits.header
+        tint = header[self.header_kw_dict['itime']]
+        coadd = header[self.header_kw_dict['coadds']]
         persec_frames = []
         for frame in self.frames:
             persec_frames.append(frame / (tint * coadd))
@@ -281,8 +293,6 @@ class Observation:
 
     def apply_photometry_frames(self, flux_per):
         """
-        Description
-        -----------
         Simply multiplies each frame by flux density / (cts/s)
         
         Parameters
@@ -294,8 +304,6 @@ class Observation:
 
     def apply_photometry_final(self, flux_per):
         """
-        Description
-        -----------
         Simply multiplies each frame by flux density / (cts/s)
         
         Parameters
@@ -307,8 +315,6 @@ class Observation:
 
     def stack(self):
         """
-        Description
-        -----------
         Cross-correlate the images applying sub-pixel shift.
         Shift found using DFT upsampling method from image_registration.
         Stack them on top of each other to increase SNR.
@@ -324,8 +330,6 @@ class Observation:
 
     def crop_final(self, bw):
         """
-        Description
-        -----------
         Applies crop to the final image. 
         
         Parameters
@@ -336,10 +340,8 @@ class Observation:
         szx, szy = self.final.shape[0], self.final.shape[1]
         self.final = self.final[bw : szx - bw, bw : szy - bw]
 
-    def plot_frames(self, png_file=None):
+    def plot_frames(self, png_file=None, figsz=3):
         """
-        Description
-        -----------
         Plot the individual frames any step in the process
         
         Parameters
@@ -349,11 +351,14 @@ class Observation:
             if None, image not saved
         """
         n = len(self.frames)
-        fig, axes = plt.subplots(1, n, figsize=(3 * n, 4))
-        for i in range(len(axes)):
+        fig, axes = plt.subplots(1, n, figsize=(figsz * n, figsz+1))
+        for i in range(n):
             plotframe = self.frames[i]
             vmax = np.nanmax(medfilt(plotframe, kernel_size=7))
-            ax = axes[i]
+            if n > 1:
+                ax = axes[i]
+            else:
+                ax = axes
             ax.imshow(plotframe, origin="lower", vmin=0, vmax=vmax)
             ax.set_title("Frame %d" % i)
             ax.set_xticks([])
@@ -388,8 +393,6 @@ class Observation:
 
     def write_frames(self, outfiles):
         """
-        Description
-        -----------
         Write each individual frame to .fits at any step in the process
         
         Parameters
@@ -406,8 +409,6 @@ class Observation:
 
     def write_final(self, outfile):
         """
-        Description
-        -----------
         Writes the final stacked frame to .fits
         
         Parameters
@@ -426,16 +427,10 @@ class Observation:
 
 class Nod(Observation):
     """
-    Description
-    -----------
     simple on-off nod dither pattern
-    
-    To do
-    -----
-    how to make it so self.final gets defined if there is no stack() function?
     """
 
-    def __init__(self, data_fname, sky_fname):
+    def __init__(self, data_fname, sky_fname, instrument):
         """
         Parameters
         ----------
@@ -445,7 +440,7 @@ class Nod(Observation):
             filename of input .fits sky frame
         """
 
-        super().__init__(data_fname)
+        super().__init__(data_fname, instrument)
 
         self.sky = Image(sky_fname).data
 
@@ -455,16 +450,12 @@ class Nod(Observation):
 
     def apply_sky(self):
         """
-        Description
-        -----------
         simply subtract the sky frame from the data
         """
         self.frames = np.array([data - self.sky for data in self.frames])
 
     def uranus_crop(self, bw):
         """
-        Description
-        -----------
         Custom crop for Uranus data. We use the right side of the
         NIRC2 detector to avoid the bad pixels in the lower left corner
         so just cutting off the left bit here
@@ -480,50 +471,27 @@ class Nod(Observation):
 
 class Bxy3(Observation):
     """
-    Description
-    -----------
     The famous bxy3 dither at Keck,
     which avoids the noisier lower left quadrant of the detector
-    
-    Parameters
-    ----------
-    fnames : list, required. 
-        fits files representing a Keck bxy3 dither
-        MUST be in the conventional order where target is in positions
-        [top left, bottom right, top right]
-    
-    Workflow
-    --------
-    obs = bxy3.Bxy3(fnames)
-    ## to check any step use:
-    # obs.plot_frames()
-    obs.make_sky(outdir+'sky_'+filt_name+'.fits')
-    obs.apply_sky(outdir+'sky_'+filt_name+'.fits')
-    obs.apply_flat(outdir+'flat_master_'+flat_filt+'.fits')
-    obs.apply_badpx_map(outdir+'badpx_map_'+flat_filt+'.fits')
-    obs.dewarp()
-    obs.remove_cosmic_rays() # at this step there remain a few spots where pixel value is much lower than Neptune pixels. Doubt this is the fault of cosmic ray program; possibly failing to find them in flats with bad pixel search. Perhaps multi-layer search, e.g. large blocksize first, small blocksize second
-    obs.per_second()
-    obs.write_frames([outdir+'frame0_nophot_'+filt_name+'.fits',outdir+'frame1_nophot_'+filt_name+'.fits',outdir+'frame2_nophot_'+filt_name+'.fits'])
-    obs.trim()
-    obs.stack()
-    obs.crop_final(50)
-    #check final
-    plt.imshow(obs.final, origin = 'lower left')
-    plt.show()
-    obs.write_final(outdir+'stacked_nophot_'+filt_name+'.fits')#,png=True, png_file = outdir+target_name+'_'+filt_name+'.png')
+    input fnames MUST be in the conventional order 
+    where target is in positions
+    [top left, bottom right, top right]
     """
 
-    def __init__(self, fnames):
+    def __init__(self, fnames, instrument):
+        '''
+        Parameters
+        ----------
+        fnames : list, required. 
+            fits files representing a Keck bxy3 dither
+        instrument : str, required.
+        '''
 
-        super().__init__(fnames)
+        super().__init__(fnames, instrument)
 
     def make_sky(self, outfile):
         """
-        Description
-        -----------
-        Make a sky frame via simple median-average of the frames
-        Works because the planet is in only one quadrant at a time
+        Make a sky frame via simple median-average of the frames.
         Writes fits file containing the sky frame
         with header info same as zeroth input bxy3 file
         
@@ -533,15 +501,16 @@ class Bxy3(Observation):
             fname to write.
         """
         # make the master sky
-        self.sky = np.median(self.frames, axis=0)
+        sky = np.median(self.frames, axis=0)
         # change some header info and write to .fits
         hdulist_out = self.dummy_fits.hdulist
-        hdulist_out[0].header["OBJECT"] = "SKY_FULL"
-        hdulist_out[0].data = self.sky
+        hdulist_out[0].header[self.header_kw_dict['object']] = "SKY_FULL"
+        hdulist_out[0].data = sky
         hdulist_out[0].writeto(outfile, overwrite=True)
 
     def apply_sky(self, fname):
-        """identify patches of "normal" sky in each of the three bxy3 frames. 
+        """
+        identify patches of "normal" sky in each of the three bxy3 frames. 
         comes up with a median average value of background for each frame. 
         Then you normalize the "full" sky frame we got from median of bxy3 
         to the value of the sky brightness in the single frame.
@@ -600,8 +569,6 @@ class Bxy3(Observation):
 
     def trim(self):
         """
-        Description
-        -----------
         Clips each image in bxy3 to its own quadrant.
         Relies on frames input being in correct order.
         Should be applied just before stacking
@@ -617,3 +584,53 @@ class Bxy3(Observation):
         ftrim1 = self.frames[1][box1[0] : box1[1], box1[2] : box1[3]]
         ftrim2 = self.frames[2][box2[0] : box2[1], box2[2] : box2[3]]
         self.frames = np.asarray([ftrim0, ftrim1, ftrim2])
+
+
+class DitherN(Observation):
+    '''
+    Generic N-position dither; fnames can have arbitrary length
+    will make sky by simple median average
+    '''
+    
+    def __init__(self, fnames, instrument):
+        '''
+        Parameters
+        ----------
+        fnames : list, required. 
+            fits files representing a Keck bxy3 dither
+        instrument : str, required.
+        '''
+
+        super().__init__(fnames, instrument)
+        
+    def make_sky(self, outfile):
+        """
+        Make a sky frame via simple median-average of the frames
+        Identical to Bxy3.make_sky()
+        
+        Parameters
+        ----------
+        outfile : str, required.
+            fname to write.
+        """
+        # make the master sky
+        sky = np.median(self.frames, axis=0)
+        # change some header info and write to .fits
+        hdulist_out = self.dummy_fits.hdulist
+        hdulist_out[0].header[self.header_kw_dict['object']] = "SKY_FULL"
+        hdulist_out[0].data = sky
+        hdulist_out[0].writeto(outfile, overwrite=True)
+    
+    
+    def apply_sky(self, fname):
+        """
+        simply subtract the sky frame from the data
+        
+        Parameters
+        ----------
+        fname : str, required.
+            filename representing sky frame fits
+        """
+        sky = Image(fname).data
+        frames = np.array([data - sky for data in self.frames])
+    

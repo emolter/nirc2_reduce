@@ -45,6 +45,7 @@ def test_flats(datadir, rawdir):
     domeflatoff = [os.path.join(rawdir, f"off{i}.fits") for i in range(5)]
     domeflaton = [os.path.join(rawdir, f"on{i}.fits") for i in range(5)]
     flat = flats.Flats(domeflatoff, domeflaton)
+    assert (not np.any(np.isnan(flat.flat)))
     flat.write(os.path.join(datadir, "flat_test.fits"))
 
     # make the badpx map

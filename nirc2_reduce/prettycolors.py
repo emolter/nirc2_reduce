@@ -5,8 +5,9 @@ def make_colormap(seq):
     """
     Parameters
     ----------
-    seq : a sequence of floats and RGB-tuples. The floats should be increasing
-    and in the interval (0,1).
+    seq : 
+        a sequence of floats and RGB-tuples. The floats should be increasing
+        and in the interval (0,1).
     
     Returns
     -------
@@ -26,8 +27,6 @@ def make_colormap(seq):
 
 def get_colormap(objname):
     """
-    Description
-    -----------
     Custom colormaps for making pretty pictures for Twilight Zone website
     
     Parameters

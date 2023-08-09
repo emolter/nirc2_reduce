@@ -5,84 +5,59 @@ import glob
 import os
 import warnings
 from astropy.time import Time
+import importlib
+import yaml
+import nirc2_reduce.data.header_kw_dicts as inst_info
 
+'''
+To do: instead of nearest_stand_filt, use header's effective wavelength!
+'''
+standard_wleff = {'j': 1.248, 'h': 1.633, 'kp': 2.124, 'lp':3.776, 'ms':4.674,}
 
-# lookup table to see which broadband flat filter
-# corresponds best to the narrow band filter used for
-# a given observation
-nearest_stand_filt = {
-    "j": "j",
-    "he1a": "j",
-    "he1_a": "j",
-    "pagamma": "j",
-    "jcont": "j",
-    "pabeta": "j",
-    "h": "h",
-    "hcont": "h",
-    "ch4s": "h",
-    "ch4_short": "h",
-    "feii": "h",
-    "ch4l": "h",
-    "ch4_long": "h",
-    "h + clear": "h",
-    "k": "k",
-    "kp": "k",
-    "kcont": "k",
-    "ks": "k",
-    "he1b": "k",
-    "brgamma": "k",
-    "br_gamma": "k",
-    "h210": "k",
-    "h221": "k",
-    "co": "k",
-    "h2o": "k",
-    "h2o_ice": "k",
-    "lp": "l",
-    "lw": "l",
-    "bracont": "l",
-    "bra": "l",
-    "br_alpha": "l",
-    "bra_cont": "l",
-    "pah": "l",
-    "ms": "m",
-}
-
+def find_nearest(array, value):
+    array = np.asarray(array)
+    idx = (np.abs(array - value)).argmin()
+    return idx, array[idx]
 
 class MultiReduce:
     """
-    Description
-    -----------
+    
+    
     superclass to multiBxy3 and multiNod
     """
 
-    def __init__(
-        self,
-        rawdir,
-        dfits_kws=["OBJECT", "DATE-OBS", "FILTER", "FLSPECTR", "TARGNAME", "AXESTAT"],
-    ):
+    def __init__(self,rawdir,instrument):
         """
         Parameters
         ----------
         rawdir : str, required.
             directory containing the raw fits files
+        instrument : str, required.
+            name of instrument used, e.g. nirc2. 
+            will look for file data/{instrument}.yaml
+            in order to scrub header keywords
+        
+        Attributes
+        ----------
+        rawdir : str
+        instrument : str
+        header_kw_dict : dict
+        tab : astropy.table.Table
         """
         self.rawdir = rawdir
+        self.instrument = instrument.lower()
+        with importlib.resources.open_binary(inst_info, f"{self.instrument}.yaml") as file:
+            yaml_bytes = file.read()
+            self.header_kw_dict = yaml.safe_load(yaml_bytes)
         self.tab = sort_rawfiles.dfits_fitsort(
-            os.path.join(self.rawdir, "*.fits"), fits_kws=dfits_kws
-        )
+            os.path.join(self.rawdir, "*.fits"), fits_kws=self.header_kw_dict['dfits_kws'])
+        
 
     def process_flats(
         self,
         flatdir,
-        date_kw="DATE-OBS",
-        filter_kw="FILTER",
-        tol=0.07,
-        blocksize=6,
-        **kwargs,
-    ):
+        **badpx_kwargs):
         """
-        Description
-        -----------
         check for new dome flats in rawdir, 
         make new flats for each filter present and put into flatdir
         
@@ -94,22 +69,33 @@ class MultiReduce:
             filenames match defaults; 
             {date}_badpx_map_{filt}.fits for bad pixel maps in given filter
             {date}_flat_master_{filt}.fits for flats in given filter
-        **kwargs : dict, optional.
-            keyword arguments to sort_rawfiles.get_flats()
+        **badpx_kwargs : dict, optional.
+            keyword arguments to flats.Flats.make_badpx_map()
         """
+        date_kw = self.header_kw_dict['date']
+        filter_kw = self.header_kw_dict['filter']
+        wl_kw = self.header_kw_dict['wl']
+        standard_filts = np.array(list(standard_wleff.keys()))
+        standard_wls = np.array([float(standard_wleff[key]) for key in standard_filts])
+        
+    
         # sort by filter
         filts, tabs_by_filt = sort_rawfiles.split_by_kw(self.tab, filter_kw)
 
         counter = 0
         for i, tab in enumerate(tabs_by_filt):
-            flatoff, flaton = sort_rawfiles.get_flats(self.tab, **kwargs)
+            flatoff, flaton = sort_rawfiles.get_flats(self.tab, self.instrument)
             date = self.tab[date_kw].data[0]
 
             # if there are new flats in that filter, make master flat and badpx map
             # and put them into flatdir
             if (len(flatoff) > 0) and (len(flaton) > 0):
                 counter += 1
-                short_name = nearest_stand_filt[filts[i].lower()]
+                
+                wl_eff = float(tab[wl_kw].data[0])
+                standard_idx, _ = find_nearest(standard_wls, wl_eff)
+                nearest_stand_filt = standard_filts[standard_idx]
+                short_name = nearest_stand_filt
                 badpx_outpath = os.path.join(
                     flatdir, f"{date}_badpx_map_{short_name}.fits"
                 )
@@ -118,7 +104,7 @@ class MultiReduce:
                 )
                 flatobj = flats.Flats(flatoff, flaton)
                 flatobj.write(flat_outpath)
-                flatobj.make_badpx_map(badpx_outpath, tol, blocksize)
+                flatobj.make_badpx_map(badpx_outpath, **badpx_kwargs)
                 print(f"wrote files {flat_outpath} and {badpx_outpath}")
         if counter == 0:
             warnings.warn("No flats processed! (none found by sort_rawfiles.get_flats)")
@@ -127,9 +113,11 @@ class MultiReduce:
 
     def _find_flats(self, flatdir, date, filt):
         """
-        Description
-        -----------
         find nearest-in-time flat and badpx map
+        searches flatdir for nearest-in-time flats
+        and badpx maps. assumes filenames in flats/ match the wildcards
+        DATE-OBS*flat*{filt}*.fits and 
+        DATE-OBS*badpx*{filt}*.fits
         
         Parameters
         ----------
@@ -177,8 +165,6 @@ class MultiReduce:
 
 class MultiBxy3(MultiReduce):
     """
-    Description
-    -----------
     run multiple filters and objects in a single date of observing
     
     Example
@@ -188,21 +174,15 @@ class MultiBxy3(MultiReduce):
     obs.run(outdir, flatdir)
     """
 
-    def __init__(self, rawdir):
+    def __init__(self, rawdir, instrument):
 
-        super().__init__(rawdir)
+        super().__init__(rawdir, instrument)
 
     def run(
         self,
         outdir,
         flatdir,
-        filts_want=None,
-        object_kw="OBJECT",
-        filter_kw="FILTER",
-        date_kw="DATE-OBS",
-        flatposkw="AXESTAT",
-        flatposarg="not",
-    ):
+        filts_want=None):
         """
         Parameters
         ----------
@@ -218,8 +198,19 @@ class MultiBxy3(MultiReduce):
         ------
         
         """
+        object_kw = self.header_kw_dict['object']
+        date_kw = self.header_kw_dict['date']
+        wl_kw = self.header_kw_dict['wl']
+        filter_kw = self.header_kw_dict['filter']
+        flatposkw = self.header_kw_dict['isdome']['kw']
+        flatposarg = self.header_kw_dict['isdome']['yesdome']
+        
         if not os.path.exists(outdir):
             os.mkdir(outdir)
+        
+        # read in standard filters    
+        standard_filts = np.array(list(standard_wleff.keys()))
+        standard_wls = np.array([float(standard_wleff[key]) for key in standard_filts])
 
         # ignore all files with dome in flat position
         isinflatpos, flatpostabs = sort_rawfiles.split_by_kw(self.tab, flatposkw)
@@ -239,6 +230,9 @@ class MultiBxy3(MultiReduce):
 
             # loop over all filters
             for i, filt_name in enumerate(filts):
+                filt_str = filt_name.replace(" ", "")
+                filt_str = filt_str.replace("+", "")
+                targ_str = targ.split(" ")[0]
                 if (filts_want is not None) and (filt_name not in filts_want):
                     continue
 
@@ -261,8 +255,10 @@ class MultiBxy3(MultiReduce):
                     fnames = fnames[-3:]
 
                 # find corresponding wideband flatfield and badpx map
+                wl_eff = float(tab[wl_kw].data[0])
+                standard_idx, _ = find_nearest(standard_wls, wl_eff)
+                flat_filt = standard_filts[standard_idx]
                 try:
-                    flat_filt = nearest_stand_filt[filt_name.lower()]
                     flat_fname, badpx_fname = self._find_flats(flatdir, date, flat_filt)
                 except (ValueError, FileNotFoundError):
                     warnings.warn(
@@ -272,10 +268,7 @@ class MultiBxy3(MultiReduce):
                     continue
 
                 # run all steps of bxy3
-                filt_str = filt_name.replace(" ", "")
-                filt_str = filt_str.replace("+", "")
-                targ_str = targ.split(" ")[0]
-                obs = observation.Bxy3(fnames)
+                obs = observation.Bxy3(fnames, self.instrument)
                 obs.make_sky(
                     os.path.join(outdir, f"{date}_{targ_str}_sky_{filt_str}.fits")
                 )

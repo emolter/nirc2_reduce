@@ -6,8 +6,6 @@ import warnings
 
 class Image:
     """
-    Description
-    -----------
     Thin wrapper to astropy.io.fits providing convenience functions
     and suppression of warnings in fits.open
     
