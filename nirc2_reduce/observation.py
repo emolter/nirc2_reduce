@@ -12,6 +12,15 @@ from image_registration.chi2_shifts import chi2_shift
 from image_registration.fft_tools.shift import shiftnd, shift2d
 import importlib.resources
 import warnings
+import yaml
+import nirc2_reduce.data.header_kw_dicts as inst_info
+
+
+'''
+To do
+-----
+weight stacks by integration time (?)
+'''
 
 
 def crop_center(frame, subc):
@@ -42,25 +51,31 @@ class Observation:
     See Bxy3() and Nod() objects for usage
     """
 
-    def __init__(self, fnames, subc_kw="NAXIS1", obj_kw="OBJECT"):
+    def __init__(self, fnames, instrument):
         """
         Parameters
         ----------
         fnames : list or str, required. 
             filenames of data frames. 
             if str, assume passing single data frame
-        subc_kw : str, optional. default NAXIS1
-            header keyword from which to scrub subc
-        obj_kw : str, optional. default OBJECT
-            header keyword from which to scrub target name
+        instrument : str, required.
+            name of instrument used, e.g. nirc2. 
+            will look for file data/{instrument}.yaml
+            in order to scrub header keywords
         
         Attributes
         ----------
         dummy_fits : nirc2_reduce.image.Image of the zeroth frame
         frames : np.array, shape (n, x, y) for the n input fits images
+        instrument : input instrument string
         subc : int. size of the subarray
         target : str. the object you observed, scrubbed from the header.
         """
+        self.instrument = instrument.lower()
+        with importlib.resources.open_binary(inst_info, f"{self.instrument}.yaml") as file:
+            yaml_bytes = file.read()
+            self.header_kw_dict = yaml.safe_load(yaml_bytes)
+        
         if type(fnames) == str:
             fnames = [
                 fnames,
@@ -68,8 +83,8 @@ class Observation:
 
         self.dummy_fits = Image(fnames[0])  # used to hijack header info
         self.frames = np.asarray([Image(f).data for f in fnames])
-        self.subc = self.dummy_fits.hdulist[0].header[subc_kw]
-        self.target = self.dummy_fits.hdulist[0].header[obj_kw]
+        self.subc = int(self.dummy_fits.header[self.header_kw_dict['subc']])
+        self.target = self.dummy_fits.header[self.header_kw_dict['object']]
 
         if self.frames[0].shape[0] != self.subc or self.frames[0].shape[1] != self.subc:
             # subarrays smaller than 512x512 on Keck are not square. chop out center
@@ -132,11 +147,7 @@ class Observation:
             frames_badpx.append(frame)
         self.frames = np.asarray(frames_badpx)
 
-    def dewarp(
-        self,
-        warpx_file="nirc2_distort_X_post20150413_v1.fits",
-        warpy_file="nirc2_distort_Y_post20150413_v1.fits",
-    ):
+    def dewarp(self):
         """
         Description
         -----------
@@ -166,6 +177,8 @@ class Observation:
         in a subdirectory of tests/
         and comparing with the expected vectors in Service+16
         """
+        warpx_file = self.header_kw_dict['warpx_file']
+        warpy_file = self.header_kw_dict['warpy_file']
         distortion_source_x = importlib.resources.open_binary(
             "nirc2_reduce.data", f"{warpx_file}"
         )
@@ -177,9 +190,9 @@ class Observation:
 
         # handle subarrays
         if (
-            self.subc != 1024
+            self.subc != warpx.shape[0]
         ):  # hardcode because dewarp arrays will always be full size of detector
-            ctr = 512
+            ctr = warpx.shape[0]/2
             ll = int(ctr - self.subc / 2)
             ul = int(ctr + self.subc / 2)
             warpx = warpx[ll:ul, ll:ul]
@@ -229,7 +242,7 @@ class Observation:
         This should be generalized to include scopes other than nirc2 more easily
         however, for typical observations ROTPOSN - INSTANGL is zero anyway
         """
-        hdr = self.dummy_fits.hdulist[0].header
+        hdr = self.dummy_fits.header
         try:
             total_rotation_ccw = custom_angle + hdr["ROTPOSN"] - hdr["INSTANGL"] - beta
         except KeyError:
@@ -257,7 +270,7 @@ class Observation:
             frames_cosray.append(cleanarr)
         self.frames = np.asarray(frames_cosray)
 
-    def per_second(self, itime_kw="ITIME", coadd_kw="COADDS"):
+    def per_second(self):
         """
         Description
         -----------
@@ -271,9 +284,9 @@ class Observation:
         coadd_kw : str, optional.
             keyword to scrub fits header for coadds
         """
-        header = self.dummy_fits.hdulist[0].header
-        tint = header[itime_kw]
-        coadd = header[coadd_kw]
+        header = self.dummy_fits.header
+        tint = header[self.header_kw_dict['itime']]
+        coadd = header[self.header_kw_dict['coadds']]
         persec_frames = []
         for frame in self.frames:
             persec_frames.append(frame / (tint * coadd))
@@ -435,7 +448,7 @@ class Nod(Observation):
     how to make it so self.final gets defined if there is no stack() function?
     """
 
-    def __init__(self, data_fname, sky_fname):
+    def __init__(self, data_fname, sky_fname, instrument):
         """
         Parameters
         ----------
@@ -445,7 +458,7 @@ class Nod(Observation):
             filename of input .fits sky frame
         """
 
-        super().__init__(data_fname)
+        super().__init__(data_fname, instrument)
 
         self.sky = Image(sky_fname).data
 
@@ -484,14 +497,10 @@ class Bxy3(Observation):
     -----------
     The famous bxy3 dither at Keck,
     which avoids the noisier lower left quadrant of the detector
-    
-    Parameters
-    ----------
-    fnames : list, required. 
-        fits files representing a Keck bxy3 dither
-        MUST be in the conventional order where target is in positions
-        [top left, bottom right, top right]
-    
+    input fnames MUST be in the conventional order 
+    where target is in positions
+    [top left, bottom right, top right]
+        
     Workflow
     --------
     obs = bxy3.Bxy3(fnames)
@@ -503,6 +512,7 @@ class Bxy3(Observation):
     obs.apply_badpx_map(outdir+'badpx_map_'+flat_filt+'.fits')
     obs.dewarp()
     obs.remove_cosmic_rays() # at this step there remain a few spots where pixel value is much lower than Neptune pixels. Doubt this is the fault of cosmic ray program; possibly failing to find them in flats with bad pixel search. Perhaps multi-layer search, e.g. large blocksize first, small blocksize second
+    obs.rotate()
     obs.per_second()
     obs.write_frames([outdir+'frame0_nophot_'+filt_name+'.fits',outdir+'frame1_nophot_'+filt_name+'.fits',outdir+'frame2_nophot_'+filt_name+'.fits'])
     obs.trim()
@@ -514,9 +524,16 @@ class Bxy3(Observation):
     obs.write_final(outdir+'stacked_nophot_'+filt_name+'.fits')#,png=True, png_file = outdir+target_name+'_'+filt_name+'.png')
     """
 
-    def __init__(self, fnames):
+    def __init__(self, fnames, instrument):
+        '''
+        Parameters
+        ----------
+        fnames : list, required. 
+            fits files representing a Keck bxy3 dither
+        instrument : str, required.
+        '''
 
-        super().__init__(fnames)
+        super().__init__(fnames, instrument)
 
     def make_sky(self, outfile):
         """
@@ -533,11 +550,11 @@ class Bxy3(Observation):
             fname to write.
         """
         # make the master sky
-        self.sky = np.median(self.frames, axis=0)
+        sky = np.median(self.frames, axis=0)
         # change some header info and write to .fits
         hdulist_out = self.dummy_fits.hdulist
-        hdulist_out[0].header["OBJECT"] = "SKY_FULL"
-        hdulist_out[0].data = self.sky
+        hdulist_out[0].header[self.header_kw_dict['object']] = "SKY_FULL"
+        hdulist_out[0].data = sky
         hdulist_out[0].writeto(outfile, overwrite=True)
 
     def apply_sky(self, fname):
@@ -617,3 +634,74 @@ class Bxy3(Observation):
         ftrim1 = self.frames[1][box1[0] : box1[1], box1[2] : box1[3]]
         ftrim2 = self.frames[2][box2[0] : box2[1], box2[2] : box2[3]]
         self.frames = np.asarray([ftrim0, ftrim1, ftrim2])
+
+
+class DitherN(Observation):
+    '''
+    Generic N-position dither; fnames can have arbitrary length
+    will make sky by simple median average
+    
+    Workflow
+    --------
+    obs = DitherN(fnames, 'osiris')
+    obs.make_sky(outdir+'sky_'+filt_name+'.fits')
+    obs.apply_sky(outdir+'sky_'+filt_name+'.fits')
+    obs.apply_flat(outdir+'flat_master_'+flat_filt+'.fits')
+    obs.apply_badpx_map(outdir+'badpx_map_'+flat_filt+'.fits')
+    obs.dewarp() #no distortion solution for osiris at time of writing
+    obs.remove_cosmic_rays()
+    obs.rotate() #no distortion solution for osiris at time of writing
+    obs.per_second()
+    obs.write_frames([outdir+'frame0_nophot_'+filt_name+'.fits',outdir+'frame1_nophot_'+filt_name+'.fits',outdir+'frame2_nophot_'+filt_name+'.fits'])
+    obs.stack()
+    obs.crop_final(500)
+    obs.plot_final(show=True, png_file=outdir+'stacked_nophot_'+filt_name+'.png')
+    obs.write_final(outdir+'stacked_nophot_'+filt_name+'.fits')
+    '''
+    
+    def __init__(self, fnames, instrument):
+        '''
+        Parameters
+        ----------
+        fnames : list, required. 
+            fits files representing a Keck bxy3 dither
+        instrument : str, required.
+        '''
+
+        super().__init__(fnames, instrument)
+        
+    def make_sky(self, outfile):
+        """
+        Description
+        -----------
+        Make a sky frame via simple median-average of the frames
+        Identical to Bxy3.make_sky()
+        
+        Parameters
+        ----------
+        outfile : str, required.
+            fname to write.
+        """
+        # make the master sky
+        sky = np.median(self.frames, axis=0)
+        # change some header info and write to .fits
+        hdulist_out = self.dummy_fits.hdulist
+        hdulist_out[0].header[self.header_kw_dict['object']] = "SKY_FULL"
+        hdulist_out[0].data = sky
+        hdulist_out[0].writeto(outfile, overwrite=True)
+    
+    
+    def apply_sky(self, fname):
+        """
+        Description
+        -----------
+        simply subtract the sky frame from the data
+        
+        Parameters
+        ----------
+        fname : str, required.
+            filename representing sky frame fits
+        """
+        sky = Image(fname).data
+        frames = np.array([data - sky for data in self.frames])
+    

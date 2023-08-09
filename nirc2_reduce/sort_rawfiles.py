@@ -3,6 +3,9 @@ import glob
 import numpy as np
 from astropy.io import fits
 from astropy.table import Table
+import nirc2_reduce.data.header_kw_dicts as inst_info
+import importlib
+import yaml
 
 warnings.filterwarnings(
     "ignore",
@@ -16,17 +19,8 @@ warnings.filterwarnings(
 
 def dfits_fitsort(
     input_wildcard,
-    fits_kws=[
-        "OBJECT",
-        "DATE-OBS",
-        "FILTER",
-        "FLIMAGIN",
-        "FLSPECTR",
-        "CURRINST",
-        "TARGNAME",
-        "AXESTAT",
-    ],
-):
+    fits_kws=[ "OBJECT", "DATE-OBS", "FILTER"]
+    ):
     """
     Description
     -----------
@@ -41,12 +35,13 @@ def dfits_fitsort(
         wildcards are allowed, as long as glob.glob()
         can read it.
         example 'raw/2023jul14/\*.fits'
-    fits_kws : list, optional. default ['OBJECT', 'FILTER']
-        which keywords to include in the output table
+    fits_kws : list, optional. default ['OBJECT', 'DATE-OBS', 'FILTER']
+        which header keywords to include in the output table
     
     Returns
     -------
-    astropy.table.Table of filenames and values corresponding to fits_kws
+    astropy.table.Table
+        filenames and values corresponding to fits_kws
     """
     fnames = glob.glob(input_wildcard)
     fnames = np.sort(fnames)
@@ -75,7 +70,10 @@ def split_by_kw(tab, kw):
     
     Returns
     -------
-    list of kw vals, list of Astropy tables
+    list
+        unique values of tab[kw]
+    list
+        Astropy tables corresponding to those values
     """
     tab.add_index(kw)
     unq = np.unique(tab[kw])
@@ -85,13 +83,8 @@ def split_by_kw(tab, kw):
 
 def get_flats(
     tab,
-    isdome_kw="TARGNAME",
-    isdome_arg="DOME",
-    lamps_kw="FLSPECTR",
-    lampson_arg="on",
-    lampsoff_arg="off",
-    remove_kw="OBJECT",
-    remove_args=["FLAT_MASTER", "DOME_FLAT_MASTER", "BADPX_MAP"],
+    instrument,
+    ignore_objects=["FLAT", "BADPX", "FLAT_MASTER", "DOME_FLAT_MASTER", "BADPX_MAP"],
 ):
     """
     Description
@@ -104,21 +97,12 @@ def get_flats(
     tab : astropy Table, required.
         table of fits header params output by dfits_fitsort()
         must have FILENAME kw
-    isdome_kw : str, optional.
-        the values in column isdome_kw that start with isdome_arg
-        should select images in dome flat position
-    isdome_arg : str, optional.
-    lamps_kw : str, optional.
-        the values in column lamps_kw that equal lampson_arg
-        should select images with domeflat lights on, and
-        the values in column lamps_kw that equal lampsoff_arg
-        should select images with domeflat lights off
-    lampson_arg : str, optional.
-    lampsoff_arg : str, optional.
-    remove_kw : str_optional.
-        the values in column remove_kw that equal any of remove_args
-        will be removed from both returned lists
-    remove_args : str, optional.
+    instrument : str, required.
+        name of instrument used, e.g. nirc2. 
+        will look for file data/{instrument}.yaml
+        in order to scrub header keywords
+    ignore_objects : list, optional.
+        special values in header[object] to ignore
     
     Returns
     -------
@@ -127,19 +111,25 @@ def get_flats(
     list
         filenames for dome flat on
     """
+    instrument = instrument.lower()
+    with importlib.resources.open_binary(inst_info, f"{instrument}.yaml") as file:
+        yaml_bytes = file.read()
+        header_kw_dict = yaml.safe_load(yaml_bytes)
+
     # ignore pre-existing bad pixel maps and master flats
-    rm_bool = np.sum(np.array([tab[remove_kw] == arg for arg in remove_args]), axis=0)
+    rm_bool = np.sum(np.array([tab[header_kw_dict['object']] == arg for arg in ignore_objects]), axis=0)
     rm_i = list(np.argwhere(rm_bool).flatten())
     tab.remove_rows(rm_i)
 
     # find dome position
-    targnames, tabs = split_by_kw(tab, isdome_kw)
-    dometab = tabs[np.argwhere([s.startswith(isdome_arg) for s in targnames])[0, 0]]
+    targnames, tabs = split_by_kw(tab, header_kw_dict['isdome']['kw'])
+    dometab = tabs[np.argwhere([s.startswith(header_kw_dict['isdome']['yesdome'].strip()) for s in targnames])[0, 0]]
 
     # find ons and offs
-    onoff, dometabs = split_by_kw(dometab, lamps_kw)
-    ons = dometabs[np.argwhere(onoff == lampson_arg)[0, 0]]
-    offs = dometabs[np.argwhere(onoff == lampsoff_arg)[0, 0]]
+    onoff, dometabs = split_by_kw(dometab, header_kw_dict['lamps']['kw'])
+    print(onoff)
+    ons = dometabs[np.argwhere(onoff == header_kw_dict['lamps']['lampon'])[0, 0]]
+    offs = dometabs[np.argwhere(onoff == header_kw_dict['lamps']['lampoff'])[0, 0]]
     flatoff = offs["FILENAME"].data
     flaton = ons["FILENAME"].data
 

@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from astropy.io import fits
 from .image import Image
-
+import warnings
 
 class Flats:
     """
@@ -47,7 +47,7 @@ class Flats:
         """
         hdulist_out = self.dummy_fits.hdulist
         hdulist_out[0].header["OBJECT"] = "FLAT_MASTER"
-        hdulist_out[0].header["TARGNAME"] = "FLAT_MASTER"
+        hdulist_out[0].header["TARGNAME"] = "DOME"
         hdulist_out[0].data = self.flat
         hdulist_out[0].writeto(outfile, overwrite=True)
 
@@ -55,7 +55,7 @@ class Flats:
         plt.imshow(self.flat, origin="lower")
         plt.show()
 
-    def make_badpx_map(self, outfile, tol, blocksize):
+    def make_badpx_map(self, outfile, tol=0.07, blocksize=6):
         """
         Description
         -----------
@@ -65,17 +65,22 @@ class Flats:
         
         Parameters
         ----------
-        outfile : str, required. fits filename to write to
-        tol : float, required. fractional tolerance. 
-        blocksize : int, required. number of pixels 
-            over which to average in each direction
+        outfile : str, required. 
+            fits filename to write to
+        tol : float, optional. default 0.07
+            fractional tolerance. 
+        blocksize : int, optional. default 6
+            number of pixels over which to average 
+            in each direction
         """
         badpx_map = np.ones(self.flat.shape)
         for i in range(0, self.flat.shape[0] + blocksize, blocksize):
             for j in range(0, self.flat.shape[1] + blocksize, blocksize):
                 flatblock = self.flat[i : i + blocksize, j : j + blocksize]
                 mapblock = badpx_map[i : i + blocksize, j : j + blocksize]
-                med = np.median(flatblock)
+                with warnings.catch_warnings():
+                    warnings.filterwarnings('ignore', category=RuntimeWarning)
+                    med = np.median(flatblock)
 
                 # if not within tolerance, set to NaN
                 mapblock[np.where(flatblock / med > 1 + tol)] = 0
