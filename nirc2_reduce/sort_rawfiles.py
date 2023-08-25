@@ -82,8 +82,8 @@ def split_by_kw(tab, kw):
 def get_flats(
     tab,
     instrument,
-    ignore_objects=["FLAT", "BADPX", "FLAT_MASTER", "DOME_FLAT_MASTER", "BADPX_MAP"],
-):
+    ignore_objects=['',]
+    ):
     """
     scrub table from dfits_fitsort to find domeflaton, domeflatoff filenames
     default params are for NIRC2
@@ -97,8 +97,8 @@ def get_flats(
         name of instrument used, e.g. nirc2. 
         will look for file data/{instrument}.yaml
         in order to scrub header keywords
-    ignore_objects : list, optional.
-        special values in header[object] to ignore
+    ignore_objects : list, optional, default empty list.
+        special values in header[object] to ignore.
     
     Returns
     -------
@@ -119,12 +119,30 @@ def get_flats(
 
     # find dome position
     targnames, tabs = split_by_kw(tab, header_kw_dict['isdome']['kw'])
-    dometab = tabs[np.argwhere([s.startswith(header_kw_dict['isdome']['yesdome'].strip()) for s in targnames])[0, 0]]
+    domebool = [s.startswith(header_kw_dict['isdome']['yesdome'].strip()) for s in targnames]
+    if not np.any(np.array(domebool)):
+        return [], []
+    dometab = tabs[np.argwhere(domebool)[0, 0]]
+    
+    # remove darks using shutter on/off kw
+    targnames, darktabs = split_by_kw(dometab, header_kw_dict['shutter']['kw'])
+    targnames = np.array([s.strip() for s in targnames])
+    shutbool = (targnames == header_kw_dict['shutter']['shutopen'])
+    if not np.any(np.array(shutbool)):
+        return [], []
+    flattab = darktabs[np.argwhere(shutbool)[0, 0]]
 
     # find ons and offs
-    onoff, dometabs = split_by_kw(dometab, header_kw_dict['lamps']['kw'])
-    ons = dometabs[np.argwhere(onoff == header_kw_dict['lamps']['lampon'])[0, 0]]
-    offs = dometabs[np.argwhere(onoff == header_kw_dict['lamps']['lampoff'])[0, 0]]
+    onoff, flattabs = split_by_kw(flattab, header_kw_dict['lamps']['kw'])
+    onbool = [s.startswith(header_kw_dict['lamps']['lampon'].strip()) for s in onoff]
+    if not np.any(np.array(onbool)):
+        print('Found some frames taken in dome flat position, but no frames with lamps on!')
+        print('Might be AO calibration; simply skipping make dome flats step')
+        print('But if you were expecting dome flats, something went wrong!')
+        return [], []
+    
+    ons = flattabs[np.argwhere(onoff == header_kw_dict['lamps']['lampon'])[0, 0]]
+    offs = flattabs[np.argwhere(onoff == header_kw_dict['lamps']['lampoff'])[0, 0]]
     flatoff = offs["FILENAME"].data
     flaton = ons["FILENAME"].data
 

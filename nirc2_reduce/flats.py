@@ -30,10 +30,17 @@ class Flats:
         self.frames_off = np.asarray([Image(f).data for f in fnames_off])
         self.frames_on = np.asarray([Image(f).data for f in fnames_on])
 
-        off = np.median(self.frames_off, axis=0)
-        on = np.median(self.frames_on, axis=0)
-        flat = on - off
-        self.flat = flat / np.median(flat)
+        off = np.nanmedian(self.frames_off, axis=0)
+        on = np.nanmedian(self.frames_on, axis=0)
+        if (np.nanmean(on) - np.nanmean(off))/np.nanmean(on) < 0.01:
+            warnings.warn(f'brightness difference between domeflaton and domeflatoff is near zero \
+            for flat including fname {fnames_on[0]}. setting to off. \
+            if this is a thermal filter (lp, ms) then this is probably ok')
+            flat = off
+        else:
+            flat = on - off
+            
+        self.flat = flat / np.nanmedian(flat)
 
     def write(self, outfile):
         """
@@ -76,10 +83,10 @@ class Flats:
                     warnings.filterwarnings('ignore', category=RuntimeWarning)
                     med = np.median(flatblock)
 
-                # if not within tolerance, set to NaN
-                mapblock[np.where(flatblock / med > 1 + tol)] = 0
-                mapblock[np.where(flatblock / med < 1 - tol)] = 0
-                badpx_map[i : i + blocksize, j : j + blocksize] = mapblock
+                    # if not within tolerance, set to NaN
+                    mapblock[np.where(flatblock / med > 1 + tol)] = 0
+                    mapblock[np.where(flatblock / med < 1 - tol)] = 0
+                    badpx_map[i : i + blocksize, j : j + blocksize] = mapblock
         self.badpx_map = badpx_map
         # change some header info and write to .fits
         hdulist_out = self.dummy_fits.hdulist

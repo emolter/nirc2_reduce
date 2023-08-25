@@ -6,7 +6,7 @@ from .image import Image
 from .prettycolors import make_colormap, get_colormap
 from scipy.signal import medfilt
 from scipy.interpolate import RectBivariateSpline
-from scipy.ndimage import rotate
+from scipy.ndimage import rotate, center_of_mass
 import astroscrappy
 from image_registration.chi2_shifts import chi2_shift
 from image_registration.fft_tools.shift import shiftnd, shift2d
@@ -83,6 +83,7 @@ class Observation:
         self.frames = np.asarray([Image(f).data for f in fnames])
         self.subc = int(self.dummy_fits.header[self.header_kw_dict['subc']])
         self.target = self.dummy_fits.header[self.header_kw_dict['object']]
+        self.filter = self.dummy_fits.header[self.header_kw_dict['filter']]
 
         if self.frames[0].shape[0] != self.subc or self.frames[0].shape[1] != self.subc:
             # subarrays smaller than 512x512 on Keck are not square. chop out center
@@ -339,6 +340,48 @@ class Observation:
         """
         szx, szy = self.final.shape[0], self.final.shape[1]
         self.final = self.final[bw : szx - bw, bw : szy - bw]
+        
+    def com_crop_final(self, wx, wy=None, cutoff=None):
+        """
+        Attempts to crop final image around bright source in frame
+        using a center-of-mass approach
+        
+        Parameters
+        ----------
+        wx : int, required.
+            distance from com to keep in +x and -x direction
+            i.e., half-width of output image
+        wy : int, optional. Default wx
+            distance from com to keep in +y and -y direction
+        cutoff : float, optional. Default None
+            the cutoff below which the data are considered noise
+            if None, code attempts to figure out rms noise based 
+            on mean and stddev in the corners, and then
+            takes 5x that value as the cutoff
+        """
+        if wy is None:
+            wy = wx
+            
+        # simple COM fails for large images because the few
+        # on-source data points do not do enough
+        # need to set the background to zero first
+        if cutoff is None:
+            a = 16
+            a0 = int(self.final.shape[0]/a)
+            a1 = int(self.final.shape[1]/a)
+            corners = np.concatenate([self.final[:a0, :a1].flatten(), 
+                        self.final[-a0:, :a1].flatten(), 
+                        self.final[a0:, -a1:].flatten(), 
+                        self.final[-a0:, -a1:].flatten()])
+            mn = np.mean(corners)
+            std = np.std(corners)
+            cutoff = np.abs(mn + std)
+            
+        data_to_calc = np.copy(self.final)
+        data_to_calc[data_to_calc < 10*cutoff] = 0.0
+        com = center_of_mass(data_to_calc)
+        
+        self.final = self.final[int(com[0]-wy):int(com[0]+wy), int(com[1]-wx):int(com[1]+wx)]
 
     def plot_frames(self, png_file=None, figsz=3):
         """
@@ -381,9 +424,11 @@ class Observation:
         try:
             cmap = get_colormap(self.target.split(" ")[0])
         except:
-            print("No custom colormap defined for target, setting to default")
+            print(f"No custom colormap defined for target {self.target}, setting to default")
             cmap = cm.viridis
         ax.imshow(self.final, cmap=cmap, origin="lower")
+        ax.set_xticks([])
+        ax.set_yticks([])
         plt.tight_layout()
         if png_file is not None:
             fig.savefig(png_file, dpi=300)
@@ -565,7 +610,7 @@ class Bxy3(Observation):
                 frames_skysub.append(frame - sky_norm)
             self.frames = np.asarray(frames_skysub)
         else:
-            print("Sky subtraction not applied (counts too low for good stats)")
+            print(f"Sky subtraction not applied to {self.target} {self.filter} {self.subc} (counts too low for good stats)")
 
     def trim(self):
         """

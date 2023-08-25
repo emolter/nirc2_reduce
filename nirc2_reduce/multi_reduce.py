@@ -74,6 +74,7 @@ class MultiReduce:
         """
         date_kw = self.header_kw_dict['date']
         filter_kw = self.header_kw_dict['filter']
+        subc_kw = self.header_kw_dict['subc']
         wl_kw = self.header_kw_dict['wl']
         standard_filts = np.array(list(standard_wleff.keys()))
         standard_wls = np.array([float(standard_wleff[key]) for key in standard_filts])
@@ -84,34 +85,37 @@ class MultiReduce:
 
         counter = 0
         for i, tab in enumerate(tabs_by_filt):
-            flatoff, flaton = sort_rawfiles.get_flats(self.tab, self.instrument)
-            date = self.tab[date_kw].data[0]
-
-            # if there are new flats in that filter, make master flat and badpx map
-            # and put them into flatdir
-            if (len(flatoff) > 0) and (len(flaton) > 0):
-                counter += 1
-                
-                wl_eff = float(tab[wl_kw].data[0])
-                standard_idx, _ = find_nearest(standard_wls, wl_eff)
-                nearest_stand_filt = standard_filts[standard_idx]
-                short_name = nearest_stand_filt
-                badpx_outpath = os.path.join(
-                    flatdir, f"{date}_badpx_map_{short_name}.fits"
-                )
-                flat_outpath = os.path.join(
-                    flatdir, f"{date}_flat_master_{short_name}.fits"
-                )
-                flatobj = flats.Flats(flatoff, flaton)
-                flatobj.write(flat_outpath)
-                flatobj.make_badpx_map(badpx_outpath, **badpx_kwargs)
-                print(f"wrote files {flat_outpath} and {badpx_outpath}")
+            
+            # sort by subarray
+            subcs, tabs_by_subc = sort_rawfiles.split_by_kw(tab, subc_kw)
+            for j, tab in enumerate(tabs_by_subc):
+            
+                flatoff, flaton = sort_rawfiles.get_flats(tab, self.instrument)
+                # if there are new flats in that filter, make master flat and badpx map
+                # and put them into flatdir
+                if (len(flatoff) > 0) and (len(flaton) > 0):
+                    counter += 1
+                    date = tab[date_kw].data[0]
+                    wl_eff = float(tab[wl_kw].data[0])
+                    standard_idx, _ = find_nearest(standard_wls, wl_eff)
+                    nearest_stand_filt = standard_filts[standard_idx]
+                    short_name = nearest_stand_filt
+                    badpx_outpath = os.path.join(
+                        flatdir, f"{date}_badpx_map_{subcs[j]}_{short_name}.fits"
+                    )
+                    flat_outpath = os.path.join(
+                        flatdir, f"{date}_flat_master_{subcs[j]}_{short_name}.fits"
+                    )
+                    flatobj = flats.Flats(flatoff, flaton)
+                    flatobj.write(flat_outpath)
+                    flatobj.make_badpx_map(badpx_outpath, **badpx_kwargs)
+                    print(f"wrote files {flat_outpath} and {badpx_outpath}")
         if counter == 0:
             warnings.warn("No flats processed! (none found by sort_rawfiles.get_flats)")
 
         return
 
-    def _find_flats(self, flatdir, date, filt):
+    def _find_flats(self, flatdir, date, filt, subc):
         """
         find nearest-in-time flat and badpx map
         searches flatdir for nearest-in-time flats
@@ -125,6 +129,7 @@ class MultiReduce:
             directory to search for flats
         date : str, required.
         filt : str, required.
+        subc : str, required.
         
         Returns
         -------
@@ -135,15 +140,15 @@ class MultiReduce:
         """
 
         # find all the flats and bad pixel maps
-        all_flats = glob.glob(f"{flatdir}/*flat*{filt}*.fits")
-        all_badpx = glob.glob(f"{flatdir}/*badpx*{filt}*.fits")
+        all_flats = glob.glob(f"{flatdir}/*flat*{subc}*{filt}*.fits")
+        all_badpx = glob.glob(f"{flatdir}/*badpx*{subc}*{filt}*.fits")
         if len(all_flats) < 1:
             raise FileNotFoundError(
-                f"No flats in directory {flatdir} match wildcard *flat*{filt}*.fits"
+                f"No flats in directory {flatdir} match wildcard *flat*{subc}*{filt}*.fits"
             )
         if len(all_badpx) < 1:
             raise FileNotFoundError(
-                f"No badpx maps in directory {flatdir} match wildcard *badpx*{filt}*.fits"
+                f"No badpx maps in directory {flatdir} match wildcard *badpx*{subc}*{filt}*.fits"
             )
         flat_dates = [f.split("/")[-1].split("_")[0] for f in all_flats]
         badpx_dates = [f.split("/")[-1].split("_")[0] for f in all_badpx]
@@ -182,7 +187,8 @@ class MultiBxy3(MultiReduce):
         self,
         outdir,
         flatdir,
-        filts_want=None):
+        filts_want=None,
+        show=False):
         """
         Parameters
         ----------
@@ -193,6 +199,8 @@ class MultiBxy3(MultiReduce):
         filts_want : list-like or None, optional. default None.
             list of filter names to run
             if None, runs all filters found in rawdir
+        show : bool, optional. default False
+            show final quicklook images while running?
         
         Writes
         ------
@@ -200,10 +208,13 @@ class MultiBxy3(MultiReduce):
         """
         object_kw = self.header_kw_dict['object']
         date_kw = self.header_kw_dict['date']
+        time_kw = self.header_kw_dict['time']
         wl_kw = self.header_kw_dict['wl']
+        subc_kw = self.header_kw_dict['subc']
         filter_kw = self.header_kw_dict['filter']
         flatposkw = self.header_kw_dict['isdome']['kw']
         flatposarg = self.header_kw_dict['isdome']['yesdome']
+        trackingarg = self.header_kw_dict['isdome']['nodome']
         
         if not os.path.exists(outdir):
             os.mkdir(outdir)
@@ -212,11 +223,9 @@ class MultiBxy3(MultiReduce):
         standard_filts = np.array(list(standard_wleff.keys()))
         standard_wls = np.array([float(standard_wleff[key]) for key in standard_filts])
 
-        # ignore all files with dome in flat position
+        # select only files where scope is tracking, i.e., the science frames
         isinflatpos, flatpostabs = sort_rawfiles.split_by_kw(self.tab, flatposkw)
-        tab = flatpostabs[
-            np.argwhere([not (s.startswith(flatposarg)) for s in isinflatpos])[0, 0]
-        ]
+        tab = flatpostabs[np.argwhere(isinflatpos == trackingarg)[0,0]]
         date = tab[date_kw].data[0]
 
         # split by object
@@ -229,28 +238,32 @@ class MultiBxy3(MultiReduce):
             filts, filt_tabs = sort_rawfiles.split_by_kw(targ_tab, filter_kw)
 
             # loop over all filters
+            failures = 0
             for i, filt_name in enumerate(filts):
                 filt_str = filt_name.replace(" ", "")
                 filt_str = filt_str.replace("+", "")
+                filt_str = filt_str.replace("clear", "")
                 targ_str = targ.split(" ")[0]
                 if (filts_want is not None) and (filt_name not in filts_want):
                     continue
 
                 print(f"Starting filter {filt_name} ({i+1} of {len(filts)})")
-                failures = 0
                 filt_tab = filt_tabs[i]
-                fnames = np.sort(filt_tab["FILENAME"].data)
+                fnames_i = np.argsort(filt_tab["FILENAME"].data)
+                fnames = filt_tab["FILENAME"].data[fnames_i]
+                time_strs = filt_tab[time_kw].data[fnames_i]
+                time_strs = [s[:5].replace(":", "")+'UT' for s in time_strs]
 
                 # check right number of frames for bxy3
                 if len(fnames) < 3:
                     warnings.warn(
-                        f"Fewer than 3 frames found for object {targ}, filter {filt_name}; skipping filter {filt_name}!"
+                        f"Fewer than 3 frames found for object {targ}, filter {filt_name}; skipping filter {filt_name}!", stacklevel=2
                     )
                     failures += 1
                     continue
                 if len(fnames) > 3:
                     warnings.warn(
-                        f"More than 3 frames found for object {targ}, filter {filt_name}; using last three!"
+                        f"More than 3 frames found for object {targ}, filter {filt_name}; using last three!", stacklevel=2
                     )
                     fnames = fnames[-3:]
 
@@ -258,11 +271,13 @@ class MultiBxy3(MultiReduce):
                 wl_eff = float(tab[wl_kw].data[0])
                 standard_idx, _ = find_nearest(standard_wls, wl_eff)
                 flat_filt = standard_filts[standard_idx]
+                subc = filt_tab[subc_kw].data[0]
                 try:
-                    flat_fname, badpx_fname = self._find_flats(flatdir, date, flat_filt)
+                    flat_fname, badpx_fname = self._find_flats(flatdir, date, flat_filt, subc)
+                    print(f'Applying flat {flat_fname}, badpx {badpx_fname}')
                 except (ValueError, FileNotFoundError):
                     warnings.warn(
-                        f"Could not find flat for filter {flat_filt} as requested by {date} {targ} {filt_name}; skipping filter {filt_name}!"
+                        f"Could not find flat for filter {flat_filt} as requested by {date} {targ} {filt_name} {subc}; skipping filter {filt_name}!", stacklevel=2
                     )
                     failures += 1
                     continue
@@ -296,15 +311,15 @@ class MultiBxy3(MultiReduce):
                 )
                 obs.trim()
                 obs.stack()
-                obs.crop_final(50)
-                obs.plot_final(
-                    show=False,
-                    png_file=os.path.join(outdir, f"{date}_{targ_str}_{filt_str}.png"),
-                )
                 obs.write_final(
                     os.path.join(
                         outdir, f"{date}_{targ_str}_stacked_nophot_{filt_str}.fits"
                     )
+                )
+                obs.com_crop_final(100)
+                obs.plot_final(
+                    show=show,
+                    png_file=os.path.join(outdir, f"{targ_str}_{filt_str}_{time_strs[0]}.png"),
                 )
             print(f"Object {targ_str} finished with {failures} failed filters")
 

@@ -1,7 +1,9 @@
 ---
 object: OBJECT
 instrument: INSTRUME
+observer: 
 date: DATE-OBS
+time: 
 filter: IFILTER
 wl: EFFWAVE
 subc: DETENDX
@@ -15,6 +17,10 @@ lamps:
   kw: FLSPECTR
   lampon: "on"
   lampoff: "off"
+shutter:
+  kw: 
+  shutopen: ""
+  shutclose: ""
 warpx_file: nirc2_distort_X_post20150413_v1.fits
 warpy_file: nirc2_distort_Y_post20150413_v1.fits
-dfits_kws: ["OBJECT", "INSTRUME", "DATE-OBS", "IFILTER", "EFFWAVE", "NAXIS1", "TRUITIME", "COADDS", "AXESTAT", "FLSPECTR"]
+dfits_kws: ["OBJECT", "INSTRUME", "DATE-OBS", "IFILTER", "EFFWAVE", "NAXIS1", "TRUITIME", "COADDS", "AXESTAT", "FLSPECTR", ]
