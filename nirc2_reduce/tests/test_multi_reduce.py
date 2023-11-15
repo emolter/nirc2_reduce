@@ -45,20 +45,20 @@ def test_MultiBxy3(datadir, rawdir, reddir, flatdir):
 
     # test major output files were written correctly
     stack_test = fits.open(
-        os.path.join(reddir, "2017-07-25_Neptune_stacked_nophot_Hclear.fits")
+        os.path.join(reddir, "2017-07-25_Neptune_stacked_nophot_H.fits")
     )[0].data
     stack_expected = fits.open(os.path.join(datadir, "bxy3_stack_expected.fits"))[
         0
     ].data
     assert np.allclose(stack_test, stack_expected, rtol=1e-3)
 
-    flat_test = fits.open(os.path.join(flatdir, "2017-07-25_flat_master_h.fits"))[
+    flat_test = fits.open(os.path.join(flatdir, "2017-07-25_flat_master_1024_h.fits"))[
         0
     ].data
     flat_expected = fits.open(os.path.join(datadir, "flat_expected.fits"))[0].data
     assert np.allclose(flat_test, flat_expected, rtol=1e-3)
 
-    badpx_test = fits.open(os.path.join(flatdir, "2017-07-25_badpx_map_h.fits"))[0].data
+    badpx_test = fits.open(os.path.join(flatdir, "2017-07-25_badpx_map_1024_h.fits"))[0].data
     badpx_expected = fits.open(os.path.join(datadir, "badpx_map_expected.fits"))[0].data
     assert np.allclose(badpx_test, badpx_expected, rtol=1e-3)
 

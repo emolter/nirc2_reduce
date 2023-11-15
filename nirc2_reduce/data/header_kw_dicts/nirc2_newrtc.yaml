@@ -3,7 +3,7 @@ object: OBJECT
 instrument: INSTRUME
 observer: OBSERVER
 date: DATE-OBS
-time: EXPSTART
+time: DATE-BEG
 filter: FILTER
 wl: EFFWAVE
 subc: NAXIS1
@@ -23,4 +23,4 @@ shutter:
   shutclose: "closed"
 warpx_file: nirc2_distort_X_post20150413_v1.fits
 warpy_file: nirc2_distort_Y_post20150413_v1.fits
-dfits_kws: ["OBJECT", "DATE-OBS", "FILTER", "EFFWAVE", "NAXIS1", "ITIME", "COADDS", "AXESTAT", "FLSPECTR", "SHRNAME", "EXPSTART", "OBSERVER"]
+dfits_kws: ["OBJECT", "DATE-OBS", "FILTER", "EFFWAVE", "NAXIS1", "ITIME", "COADDS", "AXESTAT", "FLSPECTR", "SHRNAME", "DATE-BEG", "OBSERVER"]

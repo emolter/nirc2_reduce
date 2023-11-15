@@ -25,7 +25,7 @@ def test_dfits_fitsort(rawdir):
         warnings.simplefilter("ignore")
         input_wildcard = os.path.join(rawdir, "o*.fits")
         tab = sort_rawfiles.dfits_fitsort(input_wildcard,
-                ["OBJECT", "DATE-OBS", "FILTER", "AXESTAT", "FLSPECTR"])
+                ["OBJECT", "DATE-OBS", "FILTER", "AXESTAT", "FLSPECTR", "SHRNAME"])
         flatoff, flaton = sort_rawfiles.get_flats(tab, 'nirc2')
 
     offs_expected = np.array([os.path.join(rawdir, f"off{i}.fits") for i in range(5)])
