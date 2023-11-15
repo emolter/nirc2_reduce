@@ -379,7 +379,11 @@ class Observation:
             
         data_to_calc = np.copy(self.final)
         data_to_calc[data_to_calc < 10*cutoff] = 0.0
-        com = center_of_mass(data_to_calc)
+        if np.sum(data_to_calc) == 0.0:
+            # prevents failures when low SNR
+            com = (self.final.shape[0]/2, self.final.shape[1]/2)
+        else:
+            com = center_of_mass(data_to_calc)
         
         self.final = self.final[int(com[0]-wy):int(com[0]+wy), int(com[1]-wx):int(com[1]+wx)]
 

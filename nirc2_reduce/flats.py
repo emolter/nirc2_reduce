@@ -33,9 +33,7 @@ class Flats:
         off = np.nanmedian(self.frames_off, axis=0)
         on = np.nanmedian(self.frames_on, axis=0)
         if (np.nanmean(on) - np.nanmean(off))/np.nanmean(on) < 0.01:
-            warnings.warn(f'brightness difference between domeflaton and domeflatoff is near zero \
-            for flat including fname {fnames_on[0]}. setting to off. \
-            if this is a thermal filter (lp, ms) then this is probably ok')
+            warnings.warn(f'brightness difference between domeflaton and domeflatoff is near zero for flat including fname {fnames_on[0]}. setting to off. if this is a thermal filter (lp, ms) then this is probably ok', stacklevel=2)
             flat = off
         else:
             flat = on - off
