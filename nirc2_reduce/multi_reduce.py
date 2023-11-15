@@ -296,6 +296,7 @@ class MultiBxy3(MultiReduce):
                 obs.dewarp()
                 obs.rotate()
                 obs.per_second()
+                obs.trim()
                 obs.write_frames(
                     [
                         os.path.join(
@@ -309,7 +310,6 @@ class MultiBxy3(MultiReduce):
                         ),
                     ],
                 )
-                obs.trim()
                 obs.stack()
                 obs.write_final(
                     os.path.join(

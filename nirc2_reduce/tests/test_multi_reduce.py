@@ -45,7 +45,7 @@ def test_MultiBxy3(datadir, rawdir, reddir, flatdir):
 
     # test major output files were written correctly
     stack_test = fits.open(
-        os.path.join(reddir, "2017-07-25_Neptune_stacked_nophot_Hclear.fits")
+        os.path.join(reddir, "2017-07-25_Neptune_stacked_nophot_H.fits")
     )[0].data
     stack_expected = fits.open(os.path.join(datadir, "bxy3_stack_expected.fits"))[
         0

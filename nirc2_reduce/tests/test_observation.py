@@ -49,7 +49,6 @@ def test_bxy3(datadir, rawdir):
     obs.per_second()
     obs.trim()
     obs.stack()
-    obs.crop_final(50)
     obs.write_final(os.path.join(datadir, "bxy3_stack_test.fits"))
 
     # test the sky frame
