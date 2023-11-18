@@ -38,7 +38,7 @@ def test_bxy3(datadir, rawdir):
         os.path.join(rawdir, "bxy3_2.fits"),
         os.path.join(rawdir, "bxy3_3.fits"),
     ]
-    obs = observation.Bxy3(fnames, 'nirc2')
+    obs = observation.Bxy3(fnames, "nirc2_pre_oct23")
     obs.make_sky(os.path.join(datadir, "sky_test.fits"))
     obs.apply_sky(os.path.join(datadir, "sky_expected.fits"))
     obs.apply_flat(os.path.join(datadir, "flat_expected.fits"))
@@ -71,7 +71,7 @@ def test_bxy3(datadir, rawdir):
 def test_nod(datadir, rawdir):
 
     obs = observation.Nod(
-        os.path.join(rawdir, "bxy3_2.fits"), os.path.join(datadir, "sky_expected.fits"), "nirc2"
+        os.path.join(rawdir, "bxy3_2.fits"), os.path.join(datadir, "sky_expected.fits"), "nirc2_pre_oct23"
     )
     obs.apply_sky()
     obs.apply_flat(os.path.join(datadir, "flat_expected.fits"))
@@ -95,7 +95,7 @@ def test_nod(datadir, rawdir):
 def test_raises(datadir, rawdir):
     
     obs = observation.Nod(
-        os.path.join(rawdir, "bxy3_2.fits"), os.path.join(datadir, "sky_expected.fits"), "nirc2"
+        os.path.join(rawdir, "bxy3_2.fits"), os.path.join(datadir, "sky_expected.fits"), "nirc2_pre_oct23"
     )
     obs.frames = np.empty(obs.frames.shape)
     obs.frames[:] = np.nan

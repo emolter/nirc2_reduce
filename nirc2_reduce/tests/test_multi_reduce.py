@@ -39,7 +39,7 @@ def flatdir(request, tmpdir):
 
 def test_MultiBxy3(datadir, rawdir, reddir, flatdir):
 
-    obs = multi_reduce.MultiBxy3(rawdir, "nirc2")
+    obs = multi_reduce.MultiBxy3(rawdir, "nirc2_pre_oct23")
     obs.process_flats(flatdir)  # looks for raw flat frames in rawdir, puts into flatdir
     obs.run(reddir, flatdir)
 
