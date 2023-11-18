@@ -252,6 +252,7 @@ class MultiBxy3(MultiReduce):
                 fnames_i = np.argsort(filt_tab["FILENAME"].data)
                 fnames = filt_tab["FILENAME"].data[fnames_i]
                 time_strs = filt_tab[time_kw].data[fnames_i]
+                time_strs = [s.split('T')[-1] for s in time_strs]
                 time_strs = [s[:5].replace(":", "")+'UT' for s in time_strs]
 
                 # check right number of frames for bxy3
