@@ -11,7 +11,7 @@ The nirc2\_reduce contains software for calibration, imaging, and analysis of in
 - Flux calibration and photometry
 - Flexible infrastructure for applying new dither patterns, filter passbands, distortion and  solutions, etc. for use cases on new telescopes
 
-This package has been applied successfully to NIRC2, OSIRIS, and Lick ShARCS data.
+This package has been applied successfully to NIRC2 and OSIRIS imager data. We hope to make it work with Lick ShARCS data in the future.
 
 Example images of Solar System planets made using this pipeline are available at the [Keck Twilight Zone website](https://www2.keck.hawaii.edu/inst/tda/TwilightZone.html#). 
 
