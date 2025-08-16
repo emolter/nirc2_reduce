@@ -1,9 +1,75 @@
-[build-system]
+[project]
+name = "nirc2_reduce"
+description = "Data reduction pipelines for infrared images from research-grade telescopes"
+requires-python = ">=3.11"
+authors = [{name = "Ned Molter", email = "emolter@stsci.edu"}]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Astronomy",
+    "License :: OSI Approved :: BSD License",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+    "numpy",
+    "matplotlib",
+    "scipy",
+    "astropy",
+    "astroquery",
+    "astroscrappy",
+    "pysynphot",
+    "image_registration",
+    "pyyaml",
+]
+dynamic = ["version"]
 
+[project.optional-dependencies]
+test = [
+    "pytest",
+]
+docs = [
+    "sphinx",
+    "nbsphinx",
+]
+
+[project.readme]
+file = "README.md"
+content-type = "text/markdown"
+
+[project.urls]
+Homepage = "https://github.com/emolter/nirc2_reduce"
+Tracker = "https://github.com/emolter/nirc2_reduce/issues"
+Documentation = "https://nirc2-reduce.readthedocs.io/en/latest/"
+"Source Code" = "https://github.com/emolter/nirc2_reduce"
+
+[build-system]
 requires = ["setuptools",
-            "setuptools_scm",
+            "setuptools_scm[toml]",
             "wheel",
 			"extension-helpers",
 			]
+build-backend = "setuptools.build_meta"
 
-build-backend = 'setuptools.build_meta'
+[tool.setuptools_scm]
+write_to = "nirc2_reduce/_version.py"
+
+[tool.setuptools]
+include-package-data = true
+
+[tool.setuptools.package-data]
+"*" = [
+    "data/distortion/*",
+    "data/header_kw_dicts/*",
+]
+
+[tool.build-sphinx]
+source-dir = "docs"
+build-dir = "docs"
+all_files = "1"
+
+[tool.distutils.upload_docs]
+upload-dir = "docs/_build/html"
+show-response = 1
