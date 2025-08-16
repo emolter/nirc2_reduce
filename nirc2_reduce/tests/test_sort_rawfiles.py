@@ -1,13 +1,8 @@
-import pytest
 from pytest import fixture
-import importlib
 from .. import sort_rawfiles
 import numpy as np
 
-# from distutils import dir_util
-# import shutil
 import os
-from astropy.io import fits
 from astropy import table
 import warnings
 

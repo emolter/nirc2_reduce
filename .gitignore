@@ -24,6 +24,4 @@ develop-eggs
 .installed.cfg
 distribute-*.tar.gz
 
-nirc2_reduce/old_tests
-nirc2_reduce/old
 to_do.txt

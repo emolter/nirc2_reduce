@@ -1,10 +1,7 @@
-import pytest
 from pytest import fixture
-import importlib
 from .. import flats
 import numpy as np
-from distutils import dir_util
-import os, shutil
+import os
 from astropy.io import fits
 
 # until packaging is better and rootdir is found, can use
