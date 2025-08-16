@@ -3,17 +3,18 @@ import matplotlib.pyplot as plt
 from matplotlib import cm
 from astropy.io import fits
 from .image import Image
-from .prettycolors import make_colormap, get_colormap
+from .prettycolors import get_colormap
 from scipy.signal import medfilt
 from scipy.interpolate import RectBivariateSpline
 from scipy.ndimage import rotate, center_of_mass
 import astroscrappy
 from image_registration.chi2_shifts import chi2_shift
-from image_registration.fft_tools.shift import shiftnd, shift2d
+from image_registration.fft_tools.shift import shift2d
 import importlib.resources
 import warnings
 import yaml
 import nirc2_reduce.data.header_kw_dicts as inst_info
+from datetime import datetime
 
 
 '''
@@ -69,17 +70,28 @@ class Observation:
         subc : int. size of the subarray
         target : str. the object you observed, scrubbed from the header.
         """
+        if isinstance(fnames, str):
+            fnames = [fnames,]
+        self.dummy_fits = Image(fnames[0])  # used to hijack header info
+        date = self.dummy_fits.date
         self.instrument = instrument.lower()
-        with importlib.resources.open_binary(inst_info, f"{self.instrument}.yaml") as file:
+        if instrument == "nirc2" and date is None:
+            raise ValueError(
+                "Instrument is nirc2, but DATE-OBS could not be read from header."
+                "Either choose instrument nirc2_pre_oct23 or nirc2_post_oct23, "
+                "or ensure the date can be read from the header."
+                )
+        if instrument == "nirc2":
+            date = datetime.strptime(date, "%Y-%m-%d")
+            controller_update_date = datetime.strptime("2023-10-15", "%Y-%m-%d")
+            if date >= controller_update_date:
+                instrument = "nirc2_post_oct23"
+            else:
+                instrument = "nirc2_pre_oct23"
+        with importlib.resources.open_binary(inst_info, f"{instrument}.yaml") as file:
             yaml_bytes = file.read()
             self.header_kw_dict = yaml.safe_load(yaml_bytes)
-        
-        if type(fnames) == str:
-            fnames = [
-                fnames,
-            ]  # needed to make pass through all the for loops
 
-        self.dummy_fits = Image(fnames[0])  # used to hijack header info
         self.frames = np.asarray([Image(f).data for f in fnames])
         self.subc = int(self.dummy_fits.header[self.header_kw_dict['subc']])
         self.target = self.dummy_fits.header[self.header_kw_dict['object']]
