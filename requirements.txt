@@ -1,0 +1,7 @@
+astropy
+astroscrappy
+image_registration
+matplotlib
+numpy
+pyyaml
+scipy
