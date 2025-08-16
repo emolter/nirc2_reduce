@@ -232,9 +232,9 @@ class MultiBxy3(MultiReduce):
         targets, target_tabs = sort_rawfiles.split_by_kw(tab, object_kw)
 
         # loop over all targets
-        for i, targ in enumerate(targets):
-            print(f"Starting object {targ} ({i+1} of {len(targets)})")
-            targ_tab = target_tabs[i]
+        for j, targ in enumerate(targets):
+            print(f"Starting object {targ} ({j+1} of {len(targets)})")
+            targ_tab = target_tabs[j]
             filts, filt_tabs = sort_rawfiles.split_by_kw(targ_tab, filter_kw)
 
             # loop over all filters
@@ -269,7 +269,7 @@ class MultiBxy3(MultiReduce):
                     fnames = fnames[-3:]
 
                 # find corresponding wideband flatfield and badpx map
-                wl_eff = float(tab[wl_kw].data[0])
+                wl_eff = float(filt_tab[wl_kw].data[0])
                 standard_idx, _ = find_nearest(standard_wls, wl_eff)
                 flat_filt = standard_filts[standard_idx]
                 subc = filt_tab[subc_kw].data[0]
