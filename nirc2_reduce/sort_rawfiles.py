@@ -1,11 +1,13 @@
-import warnings
 import glob
+import importlib
+import warnings
+
 import numpy as np
+import yaml
 from astropy.io import fits
 from astropy.table import Table
+
 import nirc2_reduce.data.header_kw_dicts as inst_info
-import importlib
-import yaml
 
 warnings.filterwarnings(
     "ignore",
@@ -17,16 +19,14 @@ warnings.filterwarnings(
 )
 
 
-def dfits_fitsort(
-    input_wildcard,
-    fits_kws=[ "OBJECT", "DATE-OBS", "FILTER"]
-    ):
-    """
-    Python implementation of the dfits | fitsort bash script workflow
+def dfits_fitsort(input_wildcard, fits_kws=None):
+    r"""
+    Python implementation of the dfits | fitsort bash script workflow.
+
     Searches headers of all fits in input_dir
     to find the requested keywords
     makes a table of filename, kw0, kw1, ...
-    
+
     Parameters
     ----------
     input_wildcard : str, required. path to filenames
@@ -35,23 +35,33 @@ def dfits_fitsort(
         example 'raw/2023jul14/\*.fits'
     fits_kws : list, optional. default ['OBJECT', 'DATE-OBS', 'FILTER']
         which header keywords to include in the output table
-    
+
     Returns
     -------
     astropy.table.Table
         filenames and values corresponding to fits_kws
     """
+    if fits_kws is None:
+        fits_kws = ["OBJECT", "DATE-OBS", "FILTER"]
     fnames = glob.glob(input_wildcard)
     fnames = np.sort(fnames)
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         hdrs = [fits.getheader(f, 0, ignore_missing_end=True) for f in fnames]
         vals = [
-            [fnames[i],] + [hdr[key] for key in fits_kws] for i, hdr in enumerate(hdrs)
+            [
+                fnames[i],
+            ]
+            + [hdr[key] for key in fits_kws]
+            for i, hdr in enumerate(hdrs)
         ]
 
-    names = ["FILENAME",] + fits_kws
-    dtype = [str,] * len(names)
+    names = [
+        "FILENAME",
+    ] + fits_kws
+    dtype = [
+        str,
+    ] * len(names)
     tab = Table(np.array(vals), names=names, dtype=dtype)
 
     return tab
@@ -59,13 +69,15 @@ def dfits_fitsort(
 
 def split_by_kw(tab, kw):
     """
+    Split a single table into multiple tables according to unique values of kwd.
+
     Parameters
     ----------
     tab : astropy Table, required.
         table of fits header params output by dfits_fitsort()
     kw : str, required.
         table header column to split fnames by
-    
+
     Returns
     -------
     list
@@ -79,70 +91,71 @@ def split_by_kw(tab, kw):
     return unq.data, split_tables
 
 
-def get_flats(
-    tab,
-    instrument,
-    ignore_objects=['',]
-    ):
+def get_flats(tab, instrument, ignore_objects=None):
     """
-    scrub table from dfits_fitsort to find domeflaton, domeflatoff filenames
-    default params are for NIRC2
-    
+    Scrub table from dfits_fitsort to find domeflaton, domeflatoff filenames.
+
     Parameters
     ----------
     tab : astropy Table, required.
         table of fits header params output by dfits_fitsort()
         must have FILENAME kw
     instrument : str, required.
-        name of instrument used, e.g. nirc2. 
+        name of instrument used, e.g. nirc2.
         will look for file data/{instrument}.yaml
         in order to scrub header keywords
     ignore_objects : list, optional, default empty list.
         special values in header[object] to ignore.
-    
+
     Returns
     -------
-    list 
+    list
         filenames for dome flat off
     list
         filenames for dome flat on
     """
+    if ignore_objects is None:
+        ignore_objects = [
+            "",
+        ]
     instrument = instrument.lower()
     with importlib.resources.open_binary(inst_info, f"{instrument}.yaml") as file:
         yaml_bytes = file.read()
         header_kw_dict = yaml.safe_load(yaml_bytes)
 
     # ignore pre-existing bad pixel maps and master flats
-    rm_bool = np.sum(np.array([tab[header_kw_dict['object']] == arg for arg in ignore_objects]), axis=0)
+    rm_bool = np.sum(
+        np.array([tab[header_kw_dict["object"]] == arg for arg in ignore_objects]), axis=0
+    )
     rm_i = list(np.argwhere(rm_bool).flatten())
     tab.remove_rows(rm_i)
 
     # find dome position
-    targnames, tabs = split_by_kw(tab, header_kw_dict['isdome']['kw'])
-    domebool = [s.startswith(header_kw_dict['isdome']['yesdome'].strip()) for s in targnames]
+    targnames, tabs = split_by_kw(tab, header_kw_dict["isdome"]["kw"])
+    domebool = [s.startswith(header_kw_dict["isdome"]["yesdome"].strip()) for s in targnames]
     if not np.any(np.array(domebool)):
         return [], []
     dometab = tabs[np.argwhere(domebool)[0, 0]]
-    
+
     # remove darks using shutter on/off kw
-    targnames, darktabs = split_by_kw(dometab, header_kw_dict['shutter']['kw'])
+    targnames, darktabs = split_by_kw(dometab, header_kw_dict["shutter"]["kw"])
     targnames = np.array([s.strip() for s in targnames])
-    shutbool = (targnames == header_kw_dict['shutter']['shutopen'])
+    shutbool = targnames == header_kw_dict["shutter"]["shutopen"]
     if not np.any(np.array(shutbool)):
         return [], []
     flattab = darktabs[np.argwhere(shutbool)[0, 0]]
 
     # find ons and offs
-    onoff, flattabs = split_by_kw(flattab, header_kw_dict['lamps']['kw'])
-    onbool = [s.startswith(header_kw_dict['lamps']['lampon'].strip()) for s in onoff]
+    onoff, flattabs = split_by_kw(flattab, header_kw_dict["lamps"]["kw"])
+    onbool = [s.startswith(header_kw_dict["lamps"]["lampon"].strip()) for s in onoff]
     if not np.any(np.array(onbool)):
-        print('Found some frames taken in dome flat position, but no frames with lamps on!')
-        print('Might be AO calibration; simply skipping make dome flats step')
-        print('But if you were expecting dome flats, something went wrong!')
+        print("Found some frames taken in dome flat position, but no frames with lamps on!")
+        print("Might be AO calibration; simply skipping make dome flats step")
+        print("But if you were expecting dome flats, something went wrong!")
         return [], []
-    
-    ons = flattabs[np.argwhere(onoff == header_kw_dict['lamps']['lampon'])[0, 0]]
-    offs = flattabs[np.argwhere(onoff == header_kw_dict['lamps']['lampoff'])[0, 0]]
+
+    ons = flattabs[np.argwhere(onoff == header_kw_dict["lamps"]["lampon"])[0, 0]]
+    offs = flattabs[np.argwhere(onoff == header_kw_dict["lamps"]["lampoff"])[0, 0]]
     flatoff = offs["FILENAME"].data
     flaton = ons["FILENAME"].data
 

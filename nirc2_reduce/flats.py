@@ -1,24 +1,25 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from astropy.io import fits
-from .image import Image
 import warnings
 
+import matplotlib.pyplot as plt
+import numpy as np
+
+from nirc2_reduce.image import Image
+
+
 class Flats:
-    """
-    class for dome flats
-    """
+    """Class for dome flats."""
 
     def __init__(self, fnames_off, fnames_on):
         """
-        subtract lights off from lights on,
-        divide by median value to center it around 1
-        
+        Subtract lights off from lights on.
+
+        Divide by median value to center it around 1
+
         Parameters
         ----------
         fnames_off : list, required. fits files for dome flat OFF
         fnames_on : list, required. fits files for dome flat ON
-        
+
         Attributes
         ----------
         dummy_fits : Image object used to hijack header info
@@ -32,16 +33,23 @@ class Flats:
 
         off = np.nanmedian(self.frames_off, axis=0)
         on = np.nanmedian(self.frames_on, axis=0)
-        if (np.nanmean(on) - np.nanmean(off))/np.nanmean(on) < 0.01:
-            warnings.warn(f'brightness difference between domeflaton and domeflatoff is near zero for flat including fname {fnames_on[0]}. setting to off. if this is a thermal filter (lp, ms) then this is probably ok', stacklevel=2)
+        if (np.nanmean(on) - np.nanmean(off)) / np.nanmean(on) < 0.01:
+            warnings.warn(
+                "brightness difference between domeflaton and domeflatoff is near zero "
+                f"for flat including fname {fnames_on[0]}. setting to off. "
+                "if this is a thermal filter (lp, ms) then this is probably ok",
+                stacklevel=2,
+            )
             flat = off
         else:
             flat = on - off
-            
+
         self.flat = flat / np.nanmedian(flat)
 
     def write(self, outfile):
         """
+        Write the flat to fits.
+
         Parameters
         ----------
         outfile : str, required. output fits filename
@@ -53,23 +61,25 @@ class Flats:
         hdulist_out[0].writeto(outfile, overwrite=True)
 
     def plot(self):
+        """Make a simple plot of the flat."""
         plt.imshow(self.flat, origin="lower")
         plt.show()
 
     def make_badpx_map(self, outfile, tol=0.07, blocksize=6):
         """
-        Find pixels whose values are very far from the average of their neighbors
-        Bad pixel is defined as 
+        Find pixels whose values are very far from the average of their neighbors.
+
+        Bad pixel is defined as
         abs(pixel value / median of nearby pixels - 1) > tol
-        
+
         Parameters
         ----------
-        outfile : str, required. 
+        outfile : str, required.
             fits filename to write to
         tol : float, optional. default 0.07
-            fractional tolerance. 
+            fractional tolerance.
         blocksize : int, optional. default 6
-            number of pixels over which to average 
+            number of pixels over which to average
             in each direction
         """
         badpx_map = np.ones(self.flat.shape)
@@ -78,7 +88,7 @@ class Flats:
                 flatblock = self.flat[i : i + blocksize, j : j + blocksize]
                 mapblock = badpx_map[i : i + blocksize, j : j + blocksize]
                 with warnings.catch_warnings():
-                    warnings.filterwarnings('ignore', category=RuntimeWarning)
+                    warnings.filterwarnings("ignore", category=RuntimeWarning)
                     med = np.median(flatblock)
 
                     # if not within tolerance, set to NaN

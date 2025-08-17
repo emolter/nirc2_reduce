@@ -3,12 +3,14 @@ import matplotlib.colors as mcolors
 
 def make_colormap(seq):
     """
+    Make a custom colormap.
+
     Parameters
     ----------
-    seq : 
+    seq :
         a sequence of floats and RGB-tuples. The floats should be increasing
         and in the interval (0,1).
-    
+
     Returns
     -------
     LinearSegmentedColormap
@@ -27,8 +29,8 @@ def make_colormap(seq):
 
 def get_colormap(objname):
     """
-    Custom colormaps for making pretty pictures for Twilight Zone website
-    
+    Create custom colormaps for pretty pictures for Twilight Zone website.
+
     Parameters
     ----------
     objname : str, required. name of target. currently supported:
@@ -38,9 +40,7 @@ def get_colormap(objname):
         objmap = "gist_heat"
     elif objname.lower() == "neptune":
         c = mcolors.ColorConverter().to_rgb
-        rvb = make_colormap(
-            [c("black"), c("blue"), 0.33, c("blue"), c("white"), 0.66, c("white")]
-        )
+        rvb = make_colormap([c("black"), c("blue"), 0.33, c("blue"), c("white"), 0.66, c("white")])
         objmap = rvb
     elif objname.lower() == "titan":
         c = mcolors.ColorConverter().to_rgb

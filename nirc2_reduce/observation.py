@@ -1,36 +1,39 @@
-import numpy as np
-import matplotlib.pyplot as plt
-from matplotlib import cm
-from astropy.io import fits
-from .image import Image
-from .prettycolors import get_colormap
-from scipy.signal import medfilt
-from scipy.interpolate import RectBivariateSpline
-from scipy.ndimage import rotate, center_of_mass
-import astroscrappy
-from image_registration.chi2_shifts import chi2_shift
-from image_registration.fft_tools.shift import shift2d
 import importlib.resources
 import warnings
-import yaml
-import nirc2_reduce.data.header_kw_dicts as inst_info
 from datetime import datetime
 
+import astroscrappy
+import matplotlib.pyplot as plt
+import numpy as np
+import yaml
+from astropy.io import fits
+from image_registration.chi2_shifts import chi2_shift
+from image_registration.fft_tools.shift import shift2d
+from matplotlib import cm
+from scipy.interpolate import RectBivariateSpline
+from scipy.ndimage import center_of_mass, rotate
+from scipy.signal import medfilt
 
-'''
+import nirc2_reduce.data.header_kw_dicts as inst_info
+from nirc2_reduce.image import Image
+from nirc2_reduce.prettycolors import get_colormap
+
+"""
 To do
 -----
 weight stacks by integration time (?)
-'''
+"""
 
 
 def crop_center(frame, subc):
     """
+    Crop an array around its center.
+
     Parameters
     ----------
     frame : np.array, required.
     subc : int, required.
-    
+
     Returns
     -------
     np.array
@@ -45,23 +48,26 @@ def crop_center(frame, subc):
 
 class Observation:
     """
-    Generic class containing dithers and nods
+    Generic class containing dithers and nods.
+
     To define a custom dither pattern, inherit from this class
     See Bxy3() and Nod() objects for usage
     """
 
     def __init__(self, fnames, instrument):
         """
+        Make a generic infrared imaging observation.
+
         Parameters
         ----------
-        fnames : list or str, required. 
-            filenames of data frames. 
+        fnames : list or str, required.
+            filenames of data frames.
             if str, assume passing single data frame
         instrument : str, required.
-            name of instrument used, e.g. nirc2. 
+            name of instrument used, e.g. nirc2.
             will look for file data/{instrument}.yaml
             in order to scrub header keywords
-        
+
         Attributes
         ----------
         dummy_fits : nirc2_reduce.image.Image of the zeroth frame
@@ -71,7 +77,9 @@ class Observation:
         target : str. the object you observed, scrubbed from the header.
         """
         if isinstance(fnames, str):
-            fnames = [fnames,]
+            fnames = [
+                fnames,
+            ]
         self.dummy_fits = Image(fnames[0])  # used to hijack header info
         date = self.dummy_fits.date
         self.instrument = instrument.lower()
@@ -80,7 +88,7 @@ class Observation:
                 "Instrument is nirc2, but DATE-OBS could not be read from header."
                 "Either choose instrument nirc2_pre_oct23 or nirc2_post_oct23, "
                 "or ensure the date can be read from the header."
-                )
+            )
         if instrument == "nirc2":
             date = datetime.strptime(date, "%Y-%m-%d")
             controller_update_date = datetime.strptime("2023-10-15", "%Y-%m-%d")
@@ -93,9 +101,9 @@ class Observation:
             self.header_kw_dict = yaml.safe_load(yaml_bytes)
 
         self.frames = np.asarray([Image(f).data for f in fnames])
-        self.subc = int(self.dummy_fits.header[self.header_kw_dict['subc']])
-        self.target = self.dummy_fits.header[self.header_kw_dict['object']]
-        self.filter = self.dummy_fits.header[self.header_kw_dict['filter']]
+        self.subc = int(self.dummy_fits.header[self.header_kw_dict["subc"]])
+        self.target = self.dummy_fits.header[self.header_kw_dict["object"]]
+        self.filter = self.dummy_fits.header[self.header_kw_dict["filter"]]
 
         if self.frames[0].shape[0] != self.subc or self.frames[0].shape[1] != self.subc:
             # subarrays smaller than 512x512 on Keck are not square. chop out center
@@ -106,11 +114,11 @@ class Observation:
 
     def apply_flat(self, fname):
         """
-        applies flatfield correction
-        
+        Apply the flatfield correction.
+
         Parameters
         ----------
-        fname : str, required. 
+        fname : str, required.
             filename of flat
         """
         flat = Image(fname).data
@@ -123,17 +131,16 @@ class Observation:
             with np.errstate(divide="ignore", invalid="ignore"):
                 frame_flat = frame / flat
                 # solve NaNs, but first ensure we didn't get a huge fraction of NaNs
-                if np.sum(np.isnan(frame_flat))/(frame_flat.size) < 0.1:
+                if np.sum(np.isnan(frame_flat)) / (frame_flat.size) < 0.1:
                     frame_flat[np.isnan(frame_flat)] = 0.0
                 frames_flat.append(frame_flat)
-            
+
         self.frames = np.asarray(frames_flat)
 
     def apply_badpx_map(self, fname, kernel_size=7):
         """
-        Replaces all bad pixels in input map with the median of the pixels
-        around it.
-        
+        Replace all bad pixels in input map with the median of the pixels around it.
+
         Parameters
         ----------
         fname : str, required.
@@ -146,7 +153,8 @@ class Observation:
         if badpx_map.shape[0] != self.subc:
             badpx_map = crop_center(badpx_map, self.subc)
         bad_indices = np.where(badpx_map == 0)
-        ## test case - kernel of 7 shown to remove all bad pixels including weird stripe in bottom left of detector
+        ## test case - kernel of 7 shown to remove all bad pixels
+        ## including weird stripe in bottom left of detector
         # smoothed_badpx_map = medfilt(badpx_map,kernel_size = 7)
         # fig, (ax0,ax1) = plt.subplots(1,2, figsize=(10,6))
         # ax0.imshow(badpx_map, origin = 'lower')
@@ -161,34 +169,36 @@ class Observation:
 
     def dewarp(self):
         """
-        Apply nirc2 distortion correction using updated maps 
+        Apply nirc2 distortion correction.
+
+        Uses updated maps
         from Ghez, Lu galactic center group (Service et al. 2016)
         doi:10.1088/1538-3873/128/967/095004
-        Spline interpolation used to interpolate original image. 
+        Spline interpolation used to interpolate original image.
         The spline is then evaluated at new pixel locations computed from the map.
-        Custom distortion solutions should be placed in the 
+        Custom distortion solutions should be placed in the
         nirc2_reduce/nirc2_reduce/data/ folder
-        
+
         Parameters
         ----------
         warpx_file : str, optional.
             distortion map to apply in x
         warpy_file : str, optional.
             distortion map to apply in y
-        
+
         Notes
         -----
-        From Service+16 "These are lookup tables generated by evaluating the fits 
-        from the previous section at the center of every pixel on the 
-        NIRC2 detector and are the values that should be added to 
+        From Service+16 "These are lookup tables generated by evaluating the fits
+        from the previous section at the center of every pixel on the
+        NIRC2 detector and are the values that should be added to
         raw NIRC2 positions to shift them to a distortion-free frame"
-        So the position offsets in the fits files should be added. 
-        That this works right was checked by looking at difference maps 
+        So the position offsets in the fits files should be added.
+        That this works right was checked by looking at difference maps
         in a subdirectory of tests/
         and comparing with the expected vectors in Service+16
         """
-        warpx_file = self.header_kw_dict['warpx_file']
-        warpy_file = self.header_kw_dict['warpy_file']
+        warpx_file = self.header_kw_dict["warpx_file"]
+        warpy_file = self.header_kw_dict["warpy_file"]
         distortion_source_x = importlib.resources.open_binary(
             "nirc2_reduce.data.distortion", f"{warpx_file}"
         )
@@ -202,7 +212,7 @@ class Observation:
         if (
             self.subc != warpx.shape[0]
         ):  # hardcode because dewarp arrays will always be full size of detector
-            ctr = warpx.shape[0]/2
+            ctr = warpx.shape[0] / 2
             ll = int(ctr - self.subc / 2)
             ul = int(ctr + self.subc / 2)
             warpx = warpx[ll:ul, ll:ul]
@@ -218,7 +228,7 @@ class Observation:
         flatx = mapx.flatten()
         flaty = mapy.flatten()
         frames_dewarp = []
-        
+
         for frame in self.frames:
             frame_spline = RectBivariateSpline(xx, yy, frame)
             frame_dw = frame_spline.ev(flatx, flaty).reshape(frame.shape).T
@@ -229,12 +239,13 @@ class Observation:
 
     def rotate(self, custom_angle=0.0, beta=0.252):
         """
-        Rotate frame to North up plus an additional custom angle
+        Rotate frame to North up plus an additional custom angle.
+
         if header contains 'ROTPOSN' and 'INSTANGL' keywords (i.e., nirc2-like),
         then rotation is custom_angle + (ROTPOSN-INSTANGL) - beta, counterclockwise.
         otherwise, rotation is simply custom_angle - beta, counterclockwise.
         see https://github.com/jluastro/nirc2_distortion/wiki
-        
+
         Parameters
         ----------
         custom_angle : float, optional. default 0.0. units degrees.
@@ -244,7 +255,7 @@ class Observation:
             rotation required to get North up according to astrometry solution
             clockwise is positive to agree with definition of beta given by
             the nirc2 distortion wiki
-            
+
         Notes
         -----
         This should be generalized to include scopes other than nirc2 more easily
@@ -255,7 +266,9 @@ class Observation:
             total_rotation_ccw = custom_angle + hdr["ROTPOSN"] - hdr["INSTANGL"] - beta
         except KeyError:
             warnings.warn(
-                "header keywords ROTPOSN and/or INSTANGL not found; setting rotation to custom_angle - beta"
+                "header keywords ROTPOSN and/or INSTANGL not found; "
+                "setting rotation to custom_angle - beta",
+                stacklevel=2,
             )
         self.frames = np.array(
             [rotate(frame, total_rotation_ccw, reshape=False) for frame in self.frames]
@@ -263,8 +276,8 @@ class Observation:
 
     def remove_cosmic_rays(self, **kwargs):
         """
-        Detects cosmic rays using the astroscrappy package
-        
+        Detect cosmic rays using the astroscrappy package.
+
         Parameters
         ----------
         **kwargs : dict, optional
@@ -274,7 +287,7 @@ class Observation:
         for frame in self.frames:
             if np.all(np.isnan(frame)):
                 # catches seg fault when passing all nans to detect_cosmics
-                raise ValueError('Tried to pass all NaNs to astroscrappy.detect_cosmics')
+                raise ValueError("Tried to pass all NaNs to astroscrappy.detect_cosmics")
             crmask, cleanarr = astroscrappy.detect_cosmics(frame, cleantype="medmask", **kwargs)
             # fig, (ax0,ax1,ax2) = plt.subplots(1,3, figsize=(15,6))
             # ax0.imshow(frame,origin = 'lower')
@@ -286,9 +299,8 @@ class Observation:
 
     def per_second(self):
         """
-        Changes units to counts/second by dividing by
-        ITIME x COADDS
-        
+        Change units to counts/second by dividing by ITIME x COADDS.
+
         Parameters
         ----------
         itime_kw : str, optional.
@@ -297,8 +309,8 @@ class Observation:
             keyword to scrub fits header for coadds
         """
         header = self.dummy_fits.header
-        tint = header[self.header_kw_dict['itime']]
-        coadd = header[self.header_kw_dict['coadds']]
+        tint = header[self.header_kw_dict["itime"]]
+        coadd = header[self.header_kw_dict["coadds"]]
         persec_frames = []
         for frame in self.frames:
             persec_frames.append(frame / (tint * coadd))
@@ -306,8 +318,8 @@ class Observation:
 
     def apply_photometry_frames(self, flux_per):
         """
-        Simply multiplies each frame by flux density / (cts/s)
-        
+        Multiply each frame by flux density / (cts/s).
+
         Parameters
         ----------
         flux_per : float, required. units [flux density / (cts/s)]
@@ -317,25 +329,27 @@ class Observation:
 
     def apply_photometry_final(self, flux_per):
         """
-        Simply multiplies each frame by flux density / (cts/s)
-        
+        Multiply final combined product by flux density / (cts/s).
+
         Parameters
         ----------
         flux_per : float, required. units [flux density / (cts/s)]
-            conversion factor 
+            conversion factor
         """
         self.final = self.final * flux_per
 
     def stack(self):
         """
         Cross-correlate the images applying sub-pixel shift.
+
         Shift found using DFT upsampling method from image_registration.
         Stack them on top of each other to increase SNR.
         """
         shifted_data = [self.frames[0]]
         for frame in self.frames[1:]:
-            [dx, dy, dxerr, dyerr] = chi2_shift(self.frames[0], frame)
-            # error is nonzero only if you include per-pixel error of each image as an input. Should eventually do that, but no need for now.
+            # error is nonzero only if you include per-pixel error of each image as an input.
+            # Should eventually do that, but no need for now.
+            [dx, dy, _dxerr, _dyerr] = chi2_shift(self.frames[0], frame)
             shifted = shift2d(frame, -1 * dx, -1 * dy)
             shifted_data.append(shifted)
 
@@ -343,21 +357,22 @@ class Observation:
 
     def crop_final(self, bw):
         """
-        Applies crop to the final image. 
-        
+        Apply crop to the final image.
+
         Parameters
         ----------
-        bw : int, required. 
+        bw : int, required.
             border width
         """
         szx, szy = self.final.shape[0], self.final.shape[1]
         self.final = self.final[bw : szx - bw, bw : szy - bw]
-        
+
     def com_crop_final(self, wx, wy=None, cutoff=None):
         """
-        Attempts to crop final image around bright source in frame
-        using a center-of-mass approach
-        
+        Apply a crop to the final image.
+
+        Attempts to find bright source in frame using a center-of-mass approach.
+
         Parameters
         ----------
         wx : int, required.
@@ -367,42 +382,48 @@ class Observation:
             distance from com to keep in +y and -y direction
         cutoff : float, optional. Default None
             the cutoff below which the data are considered noise
-            if None, code attempts to figure out rms noise based 
+            if None, code attempts to figure out rms noise based
             on mean and stddev in the corners, and then
             takes 5x that value as the cutoff
         """
         if wy is None:
             wy = wx
-            
+
         # simple COM fails for large images because the few
         # on-source data points do not do enough
         # need to set the background to zero first
         if cutoff is None:
             a = 16
-            a0 = int(self.final.shape[0]/a)
-            a1 = int(self.final.shape[1]/a)
-            corners = np.concatenate([self.final[:a0, :a1].flatten(), 
-                        self.final[-a0:, :a1].flatten(), 
-                        self.final[a0:, -a1:].flatten(), 
-                        self.final[-a0:, -a1:].flatten()])
+            a0 = int(self.final.shape[0] / a)
+            a1 = int(self.final.shape[1] / a)
+            corners = np.concatenate(
+                [
+                    self.final[:a0, :a1].flatten(),
+                    self.final[-a0:, :a1].flatten(),
+                    self.final[a0:, -a1:].flatten(),
+                    self.final[-a0:, -a1:].flatten(),
+                ]
+            )
             mn = np.mean(corners)
             std = np.std(corners)
             cutoff = np.abs(mn + std)
-            
+
         data_to_calc = np.copy(self.final)
-        data_to_calc[data_to_calc < 10*cutoff] = 0.0
+        data_to_calc[data_to_calc < 10 * cutoff] = 0.0
         if np.sum(data_to_calc) == 0.0:
             # prevents failures when low SNR
-            com = (self.final.shape[0]/2, self.final.shape[1]/2)
+            com = (self.final.shape[0] / 2, self.final.shape[1] / 2)
         else:
             com = center_of_mass(data_to_calc)
-        
-        self.final = self.final[int(com[0]-wy):int(com[0]+wy), int(com[1]-wx):int(com[1]+wx)]
+
+        self.final = self.final[
+            int(com[0] - wy) : int(com[0] + wy), int(com[1] - wx) : int(com[1] + wx)
+        ]
 
     def plot_frames(self, png_file=None, figsz=3):
         """
-        Plot the individual frames any step in the process
-        
+        Plot the individual frames any step in the process.
+
         Parameters
         ----------
         png_file : str or None, optional.
@@ -410,7 +431,7 @@ class Observation:
             if None, image not saved
         """
         n = len(self.frames)
-        fig, axes = plt.subplots(1, n, figsize=(figsz * n, figsz+1))
+        fig, axes = plt.subplots(1, n, figsize=(figsz * n, figsz + 1))
         for i in range(n):
             plotframe = self.frames[i]
             vmax = np.nanmax(medfilt(plotframe, kernel_size=7))
@@ -419,7 +440,7 @@ class Observation:
             else:
                 ax = axes
             ax.imshow(plotframe, origin="lower", vmin=0, vmax=vmax)
-            ax.set_title("Frame %d" % i)
+            ax.set_title(f"Frame {i}")
             ax.set_xticks([])
             ax.set_yticks([])
         if png_file is not None:
@@ -428,6 +449,8 @@ class Observation:
 
     def plot_final(self, show=True, png_file=None):
         """
+        Plot the final product.
+
         Parameters
         ----------
         show : bool, optional.
@@ -439,7 +462,7 @@ class Observation:
         fig, ax = plt.subplots(1, 1, figsize=(8, 8))
         try:
             cmap = get_colormap(self.target.split(" ")[0])
-        except:
+        except:  # noqa: E722
             print(f"No custom colormap defined for target {self.target}, setting to default")
             cmap = cm.viridis
         ax.imshow(self.final, cmap=cmap, origin="lower")
@@ -454,11 +477,11 @@ class Observation:
 
     def write_frames(self, outfiles):
         """
-        Write each individual frame to .fits at any step in the process
-        
+        Write each individual frame to .fits at any step in the process.
+
         Parameters
         ----------
-        outfiles : list, required. 
+        outfiles : list, required.
             filenames to write
         """
         for i in range(len(self.frames)):
@@ -470,11 +493,11 @@ class Observation:
 
     def write_final(self, outfile):
         """
-        Writes the final stacked frame to .fits
-        
+        Write the final stacked frame to .fits.
+
         Parameters
         ----------
-        outfile : str, required. 
+        outfile : str, required.
             filename to write
         png_file : str or None, optional.
             filename to which image is saved
@@ -487,20 +510,19 @@ class Observation:
 
 
 class Nod(Observation):
-    """
-    simple on-off nod dither pattern
-    """
+    """Simple on-off nod dither pattern."""
 
     def __init__(self, data_fname, sky_fname, instrument):
         """
+        Initialize a nod-type observation.
+
         Parameters
         ----------
-        data_fname : str, required. 
+        data_fname : str, required.
             filename of input .fits data frame
-        sky_fname : str, required. 
+        sky_fname : str, required.
             filename of input .fits sky frame
         """
-
         super().__init__(data_fname, instrument)
 
         self.sky = Image(sky_fname).data
@@ -510,52 +532,55 @@ class Nod(Observation):
             self.sky = crop_center(self.sky, self.subc)
 
     def apply_sky(self):
-        """
-        simply subtract the sky frame from the data
-        """
+        """Simply subtract the sky frame from the data."""
         self.frames = np.array([data - self.sky for data in self.frames])
 
     def uranus_crop(self, bw):
         """
-        Custom crop for Uranus data. We use the right side of the
+        Apply a custom crop for Uranus data.
+
+        We use the right side of the
         NIRC2 detector to avoid the bad pixels in the lower left corner
         so just cutting off the left bit here
-        
+
         Parameters
         ----------
         bw : int, required.
             width of the crop
         """
-        szx, szy = self.frames[0].shape[0], self.frames[0].shape[1]
+        szx, _szy = self.frames[0].shape[0], self.frames[0].shape[1]
         self.frames = np.array([data[bw : szx - bw, 2 * bw :] for data in self.frames])
 
 
 class Bxy3(Observation):
     """
-    The famous bxy3 dither at Keck,
-    which avoids the noisier lower left quadrant of the detector
-    input fnames MUST be in the conventional order 
+    The famous bxy3 dither at Keck.
+
+    bxy3 avoids the noisier lower left quadrant of the detector
+    input fnames MUST be in the conventional order
     where target is in positions
     [top left, bottom right, top right]
     """
 
     def __init__(self, fnames, instrument):
-        '''
+        """
+        Initialize a bxy3 observation.
+
         Parameters
         ----------
-        fnames : list, required. 
+        fnames : list, required.
             fits files representing a Keck bxy3 dither
         instrument : str, required.
-        '''
-
+        """
         super().__init__(fnames, instrument)
 
     def make_sky(self, outfile):
         """
         Make a sky frame via simple median-average of the frames.
+
         Writes fits file containing the sky frame
         with header info same as zeroth input bxy3 file
-        
+
         Parameters
         ----------
         outfile : str, required.
@@ -565,29 +590,29 @@ class Bxy3(Observation):
         sky = np.median(self.frames, axis=0)
         # change some header info and write to .fits
         hdulist_out = self.dummy_fits.hdulist
-        hdulist_out[0].header[self.header_kw_dict['object']] = "SKY_FULL"
+        hdulist_out[0].header[self.header_kw_dict["object"]] = "SKY_FULL"
         hdulist_out[0].data = sky
         hdulist_out[0].writeto(outfile, overwrite=True)
 
     def apply_sky(self, fname):
         """
-        identify patches of "normal" sky in each of the three bxy3 frames. 
-        comes up with a median average value of background for each frame. 
-        Then you normalize the "full" sky frame we got from median of bxy3 
+        Identify patches of "normal" sky in each of the three bxy3 frames.
+
+        Comes up with a median average value of background for each frame.
+        Then you normalize the "full" sky frame we got from median of bxy3
         to the value of the sky brightness in the single frame.
         Also normalizes everything to be around 1, so can directly multiply by data
         This ONLY works if bxy3 frames are input in the correct (usual) order,
         top left | bottom right | top right
-        
+
         Parameters
         ----------
-        fname : str, required. 
+        fname : str, required.
             filename pointing to sky frame
         """
-
-        full_sky = Image(
-            fname
-        ).data  # could just as easily use self.sky, but this way could theoretically load a different sky background if desired
+        # could just as easily use self.sky, but this way could theoretically
+        # load a different sky background if desired
+        full_sky = Image(fname).data
         if full_sky.shape[0] != self.subc:
             full_sky = crop_center(full_sky, self.subc)
 
@@ -626,11 +651,15 @@ class Bxy3(Observation):
                 frames_skysub.append(frame - sky_norm)
             self.frames = np.asarray(frames_skysub)
         else:
-            print(f"Sky subtraction not applied to {self.target} {self.filter} {self.subc} (counts too low for good stats)")
+            print(
+                f"Sky subtraction not applied to {self.target} {self.filter} {self.subc} "
+                "(counts too low for good stats)"
+            )
 
     def trim(self):
         """
-        Clips each image in bxy3 to its own quadrant.
+        Clip each image in bxy3 to its own quadrant.
+
         Relies on frames input being in correct order.
         Should be applied just before stacking
         """
@@ -648,27 +677,31 @@ class Bxy3(Observation):
 
 
 class DitherN(Observation):
-    '''
-    Generic N-position dither; fnames can have arbitrary length
+    """
+    Generic N-position dither.
+
+    fnames can have arbitrary length;
     will make sky by simple median average
-    '''
-    
+    """
+
     def __init__(self, fnames, instrument):
-        '''
+        """
+        Make a DitherN observation.
+
         Parameters
         ----------
-        fnames : list, required. 
+        fnames : list, required.
             fits files representing a Keck bxy3 dither
         instrument : str, required.
-        '''
-
+        """
         super().__init__(fnames, instrument)
-        
+
     def make_sky(self, outfile):
         """
-        Make a sky frame via simple median-average of the frames
+        Make a sky frame via simple median-average of the frames.
+
         Identical to Bxy3.make_sky()
-        
+
         Parameters
         ----------
         outfile : str, required.
@@ -678,20 +711,19 @@ class DitherN(Observation):
         sky = np.median(self.frames, axis=0)
         # change some header info and write to .fits
         hdulist_out = self.dummy_fits.hdulist
-        hdulist_out[0].header[self.header_kw_dict['object']] = "SKY_FULL"
+        hdulist_out[0].header[self.header_kw_dict["object"]] = "SKY_FULL"
         hdulist_out[0].data = sky
         hdulist_out[0].writeto(outfile, overwrite=True)
-    
-    
+
     def apply_sky(self, fname):
         """
-        simply subtract the sky frame from the data
-        
+        Simply subtract the sky frame from the data.
+
         Parameters
         ----------
         fname : str, required.
             filename representing sky frame fits
         """
-        sky = Image(fname).data
-        frames = np.array([data - sky for data in self.frames])
-    
+        pass
+        # sky = Image(fname).data
+        # frames = np.array([data - sky for data in self.frames])
