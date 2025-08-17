@@ -1,5 +1,6 @@
 import importlib.resources
 import warnings
+from datetime import datetime
 
 import astroscrappy
 import matplotlib.pyplot as plt
@@ -75,17 +76,30 @@ class Observation:
         subc : int. size of the subarray
         target : str. the object you observed, scrubbed from the header.
         """
-        self.instrument = instrument.lower()
-        with importlib.resources.open_binary(inst_info, f"{self.instrument}.yaml") as file:
-            yaml_bytes = file.read()
-            self.header_kw_dict = yaml.safe_load(yaml_bytes)
-
         if isinstance(fnames, str):
             fnames = [
                 fnames,
-            ]  # needed to make pass through all the for loops
-
+            ]
         self.dummy_fits = Image(fnames[0])  # used to hijack header info
+        date = self.dummy_fits.date
+        self.instrument = instrument.lower()
+        if instrument == "nirc2" and date is None:
+            raise ValueError(
+                "Instrument is nirc2, but DATE-OBS could not be read from header."
+                "Either choose instrument nirc2_pre_oct23 or nirc2_post_oct23, "
+                "or ensure the date can be read from the header."
+            )
+        if instrument == "nirc2":
+            date = datetime.strptime(date, "%Y-%m-%d")
+            controller_update_date = datetime.strptime("2023-10-15", "%Y-%m-%d")
+            if date >= controller_update_date:
+                instrument = "nirc2_post_oct23"
+            else:
+                instrument = "nirc2_pre_oct23"
+        with importlib.resources.open_binary(inst_info, f"{instrument}.yaml") as file:
+            yaml_bytes = file.read()
+            self.header_kw_dict = yaml.safe_load(yaml_bytes)
+
         self.frames = np.asarray([Image(f).data for f in fnames])
         self.subc = int(self.dummy_fits.header[self.header_kw_dict["subc"]])
         self.target = self.dummy_fits.header[self.header_kw_dict["object"]]

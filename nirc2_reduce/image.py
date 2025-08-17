@@ -48,6 +48,10 @@ class Image:
         self.header = self.hdulist[0].header
         self.data = self.hdulist[0].data
         try:
+            self.date = self.header["DATE-OBS"]
+        except KeyError:
+            self.date = None
+        try:
             targ = self.header["OBJECT"]
             self.target = targ.split()[0].strip(", \n").capitalize()
         except KeyError:
